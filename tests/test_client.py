@@ -54,9 +54,10 @@ class TestWrapperSudsClient:
 
     def test_get_services(self, wrappersudsclient):
         services = [
-            'ReadMultiple', 'CreateMultiple', 'Read', 'GetRecIdFromKey',
-            'Create', 'ReadByRecId', 'Update', 'UpdateMultiple', 'IsUpdated',
-            'Delete' ]
+            'Delete_Diff', 'Read_Diff', 'ReadMultiple', 'CreateMultiple',
+            'Read', 'GetRecIdFromKey', 'Create', 'ReadByRecId', 'Update',
+            'UpdateMultiple', 'IsUpdated', 'Delete_Fail', 'Read_NotFound',
+            'Delete']
         assert wrappersudsclient.get_services() == services
 
     def test_get_service_params(self, wrappersudsclient):
