@@ -1,4 +1,7 @@
 # Lather
+[![Build Status](https://travis-ci.org/ctxis/lather.svg?branch=master)](https://travis-ci.org/ctxis/lather)
+[![Coverage Status](https://coveralls.io/repos/github/ctxis/lather/badge.svg?branch=master)](https://coveralls.io/github/ctxis/lather?branch=master)
+[![Code Climate](https://codeclimate.com/github/ctxis/lather/badges/gpa.svg)](https://codeclimate.com/github/ctxis/lather)
 
 Application which provides an `django` like interface to interact with SOAP APIs.
 
