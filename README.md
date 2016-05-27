@@ -29,8 +29,6 @@ import models
 
 client = client.LatherClient()
 client.register(models.Customer)
-
-customers = Customer.objects.get(key="key")
 ```
 
 ## Support
