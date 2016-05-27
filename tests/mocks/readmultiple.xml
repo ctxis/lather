@@ -1,0 +1,24 @@
+<Soap:Envelope xmlns:Soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <Soap:Body>
+        <ReadMultiple_Result
+                xmlns="urn:microsoft-dynamics-schemas/page/customer">
+            <ReadMultiple_Result>
+                <Customer>
+                    <Key>Key</Key>
+                    <No>TEST</No>
+                    <Name>Test</Name>
+                </Customer>
+                <Customer>
+                    <Key>Key2</Key>
+                    <No>TEST2</No>
+                    <Name>Test for example</Name>
+                </Customer>
+                <Customer>
+                    <Key>Key3</Key>
+                    <No>TEST3</No>
+                    <Name>Test3 for example</Name>
+                </Customer>
+            </ReadMultiple_Result>
+        </ReadMultiple_Result>
+    </Soap:Body>
+</Soap:Envelope>

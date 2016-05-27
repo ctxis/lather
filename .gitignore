@@ -1,0 +1,13 @@
+# Some files
+.coverage
+*.pyc
+
+# Some guis
+.idea
+env
+htmlcov
+*.egg-info
+dist
+build
+tests/.cache
+.cache

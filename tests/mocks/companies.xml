@@ -1,0 +1,10 @@
+<Soap:Envelope xmlns:Soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <Soap:Body>
+        <Companies_Result xmlns="urn:microsoft-dynamics-schemas/nav/system/">
+            <return_value>Company1</return_value>
+            <return_value>Company2</return_value>
+            <return_value>Company3</return_value>
+            <return_value>Company4</return_value>
+        </Companies_Result>
+    </Soap:Body>
+</Soap:Envelope>

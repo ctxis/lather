@@ -1,0 +1,11 @@
+<Soap:Envelope xmlns:Soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <Soap:Body>
+        <Update_Result xmlns="urn:microsoft-dynamics-schemas/page/customer">
+            <Customer>
+                <Key>Key</Key>
+                <No>TEST</No>
+                <Name>Test for example</Name>
+            </Customer>
+        </Update_Result>
+    </Soap:Body>
+</Soap:Envelope>
