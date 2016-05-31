@@ -26,10 +26,7 @@ setup(
     ],
     install_requires=[
         'suds==0.4',
-        'python-ntml3'
-    ],
-    dependency_links=[
-        "https://github.com/ctxis/python-ntlm3.git"
+        'python-ntlm3'
     ]
 )
 
