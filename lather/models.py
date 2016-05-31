@@ -96,10 +96,8 @@ class QuerySet(object):
         raise AttributeError(item)
 
     def _connect(self, company=None, page=None):
-        if not page and company:
-            return self.model.client.connect(self.model._meta.page, company)
-        if not company and page:
-            return self.model.client.connect(page, direct=True)
+        if not page:
+            page = self.model._meta.page
 
         return self.model.client.connect(page, company)
 
@@ -147,6 +145,42 @@ class QuerySet(object):
             return inst
 
     @require_client
+    def all(self):
+        self.queryset = []
+        companies = self.model.client.companies
+        for company in companies:
+            client = self._connect(company)
+
+            # TODO: Try pipe filters
+            response = iter(getattr(client, self.model._meta.all)())
+
+            for result in response:
+                log.debug('From the company %s we got the result: %s'
+                          % (company, result))
+                inst = self.model()
+                inst.populate_attrs(result)
+                inst.add_key(company, client,
+                             getattr(result, self.model._meta.default_id))
+
+                if self.queryset:
+                    found = False
+                    for obj in self.queryset:
+                        if inst == obj:
+                            obj_keys = getattr(obj,
+                                               self.model._meta.default_id)
+                            inst_keys = getattr(inst,
+                                                self.model._meta.default_id)
+                            obj_keys.extend(inst_keys)
+                            found = True
+
+                    if not found:
+                        self.queryset.append(inst)
+                else:
+                    self.queryset.append(inst)
+
+        return self
+
+    @require_client
     def get(self, **kwargs):
         self._check_kwargs(self.model._meta.get, **kwargs)
 
@@ -160,6 +194,12 @@ class QuerySet(object):
                 response = getattr(client, self.model._meta.get)(**kwargs)
             except AttributeError:
                 continue
+
+            if isinstance(response, list):
+                raise Exception('This function can return only one object but '
+                                'the query returned multiple results. '
+                                'Use all instead')
+
             inst = self.model()
             inst.populate_attrs(response)
             inst.add_key(company, client,
@@ -429,6 +469,7 @@ class Options(object):
         self.model = None
         self.create = 'Create'
         self.get = 'Read'
+        self.all = None
         self.update = 'Update'
         self.delete = 'Delete'
         self.filter = 'ReadMultiple'

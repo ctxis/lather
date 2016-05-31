@@ -6,7 +6,7 @@ import urllib
 from suds.client import Client
 from suds.transport.http import HttpAuthenticated
 
-from .enums import AuthEnums
+from .enums import AuthEnums, ServiceEnums
 from .https import NTLMSSPAuthenticated
 from .decorators import *
 
@@ -18,6 +18,7 @@ class WrapperSudsClient(object):
         """
         Creates a suds client
         """
+        log.debug('Calling wrapper __init__: %s', endpoint)
         self.client = Client(endpoint, **kwargs)
 
     def __getattr__(self, item):
@@ -68,7 +69,8 @@ class WrapperSudsClient(object):
 
 class LatherClient(object):
     def __init__(self, base, username=None, password=None, auth=AuthEnums.NTLM,
-                 proxy=None, cache=True, main='SystemService'):
+                 proxy=None, service=ServiceEnums.NAV, cache=True,
+                 main='SystemService'):
         self.base = base
         self.username = username
         self.password = password
@@ -77,8 +79,15 @@ class LatherClient(object):
         self.main = main
         self.cache = cache
         self.models = []
-        self.companies = []
-        self.update_companies()
+        self.service = service
+        # Initialize companies with a list containing a None object. This is
+        # usefull because we dont have to rewrite the QuerySet class. It will
+        # iterate over the companies and essentially will make an endpoint
+        # without company. Usefull for the Generic services
+        self.companies = [None]
+        if self.service == ServiceEnums.NAV:
+            self.companies = []
+            self.update_companies()
 
     def _create_ntlm_auth(self):
         """
@@ -115,24 +124,24 @@ class LatherClient(object):
 
         return options
 
-    def _make_endpoint(self, page, company, direct):
+    def _make_endpoint(self, page, company):
         """
         Creates the endpoint
         """
         if company:
             url = '%s/%s' %(urllib.quote(company), page)
-        elif not company and self.companies and not direct:
+        elif self.companies and self.companies[0]:
             url = '%s/%s' %(urllib.quote(self.companies[0]), page)
         else:
             url = page
 
         return urlparse.urljoin(self.base, url)
 
-    def connect(self, page, company=None, direct=False):
+    def connect(self, page, company=None):
         """
         Creates the connection to the endpoint
         """
-        endpoint = self._make_endpoint(page, company, direct)
+        endpoint = self._make_endpoint(page, company)
         options = self._make_options()
 
         return WrapperSudsClient(endpoint, **options)
@@ -142,6 +151,9 @@ class LatherClient(object):
         Make an initial request to the system service endpoint to get all
         the companies
         """
+        if self.service != ServiceEnums.NAV:
+            raise Exception('You can only call this function only if the '
+                            'system is NAV')
         client = self.connect(self.main)
         self.companies = client.Companies()
 
@@ -160,7 +172,7 @@ class LatherClient(object):
         :return: list of tuples, [(name, element),...]
         """
         params = []
-        client = self.connect(page, direct=True)
+        client = self.connect(page)
         try:
             method = client.client.wsdl.services[0].ports[0].methods[service]
             params = method.binding.input.param_defs(method)
