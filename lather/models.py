@@ -89,6 +89,9 @@ class QuerySet(object):
                     log.debug('called with %r and %r' % (args, kwargs))
                     companies = self.model.client.companies
                     for company in companies:
+                        # TODO: Create dynamically a new class from Model
+                        # with the same name as the codeunit and save the
+                        # results
                         new_client = self._connect(codeunit, company)
                         func = getattr(new_client, services[service])
                         return func(*args, **kwargs)

@@ -13,7 +13,7 @@ class TestLatherClient:
 
     @pytest.fixture
     def latherclient(self):
-        return client.LatherClient('test', cache=False)
+        return client.LatherClient('test', cache=None)
 
     def test_make_options_ntlm(self):
         latherclient = client.LatherClient('test', 'test', 'test')

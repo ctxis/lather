@@ -24,7 +24,7 @@ base_url = 'http://server/'
 # Create client
 latherclient = client.LatherClient(base_url,
                                    service=enums.ServiceEnums.GENERIC,
-                                   cache=False)
+                                   cache=None)
 
 # Register the models with the appropriate client
 latherclient.register(CustomerService)

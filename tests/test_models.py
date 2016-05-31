@@ -252,7 +252,7 @@ class TestQueryset:
 
     @pytest.fixture
     def queryset(self, customer_model):
-        latherclient = client.LatherClient('test', cache=False)
+        latherclient = client.LatherClient('test', cache=None)
         latherclient.register(customer_model)
         return models.QuerySet(customer_model.objects, customer_model)
 

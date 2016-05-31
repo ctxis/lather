@@ -5,6 +5,7 @@ import urllib
 
 from suds.client import Client
 from suds.transport.http import HttpAuthenticated
+from suds.plugin import DocumentPlugin
 
 from .enums import AuthEnums, ServiceEnums
 from .https import NTLMSSPAuthenticated
@@ -69,16 +70,16 @@ class WrapperSudsClient(object):
 
 class LatherClient(object):
     def __init__(self, base, username=None, password=None, auth=AuthEnums.NTLM,
-                 proxy=None, service=ServiceEnums.NAV, cache=True,
-                 main='SystemService'):
+                 proxy=None, service=ServiceEnums.NAV, main='SystemService',
+                 **kwargs):
         self.base = base
         self.username = username
         self.password = password
         self.auth = auth
         self.proxy = proxy
         self.main = main
-        self.cache = cache
         self.models = []
+        self.options = kwargs
         self.service = service
         # Initialize companies with a list containing a None object. This is
         # usefull because we dont have to rewrite the QuerySet class. It will
@@ -102,7 +103,7 @@ class LatherClient(object):
         Create the Basic auth
         """
         basic = HttpAuthenticated(username=self.username,
-                                 password=self.password)
+                                  password=self.password)
         return basic
 
     def _make_options(self):
@@ -119,8 +120,8 @@ class LatherClient(object):
         if self.proxy:
             options.update(proxy=self.proxy)
 
-        if not self.cache:
-            options.update(cache=None)
+        # Set the other options
+        options.update(**self.options)
 
         return options
 
@@ -129,9 +130,9 @@ class LatherClient(object):
         Creates the endpoint
         """
         if company:
-            url = '%s/%s' %(urllib.quote(company), page)
+            url = '%s/%s' % (urllib.quote(company), page)
         elif self.companies and self.companies[0]:
-            url = '%s/%s' %(urllib.quote(self.companies[0]), page)
+            url = '%s/%s' % (urllib.quote(self.companies[0]), page)
         else:
             url = page
 
@@ -165,7 +166,7 @@ class LatherClient(object):
         model.client = self
         model.objects = model._meta.manager(model)
 
-    #TODO: Duplicate, find a way to remove it
+    # TODO: Duplicate, find a way to remove it
     def get_service_params(self, service, page):
         """
         Get params of the service
@@ -180,3 +181,24 @@ class LatherClient(object):
             pass
 
         return params
+
+
+class AddService(DocumentPlugin):
+    """
+    Plugin to manipulate the response of an exchange server
+    """
+
+    def loaded(self, ctx):
+        """Add missing service."""
+        urlprefix = urlparse.urlparse(ctx.url)
+        service_url = urlparse.urlunparse(
+            urlprefix[:2] + ('/EWS/Exchange.asmx', '', '', ''))
+        servicexml = u'''  <wsdl:service name="ExchangeServices">
+    <wsdl:port name="ExchangeServicePort" binding="tns:ExchangeServiceBinding">
+      <soap:address location="%s"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>''' % service_url
+        ctx.document = ctx.document.replace('</wsdl:definitions>',
+                                            servicexml.encode('utf-8'))
+        return ctx
