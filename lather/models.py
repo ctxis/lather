@@ -13,6 +13,7 @@ class Field(object):
     de-serialization. Suds library also cares about the serialization. So in
     this class we only define the validators
     """
+
     def __init__(self, name=None, max_length=None, min_length=None,
                  validators=None, default=None):
         self.name = name
@@ -63,7 +64,6 @@ class Field(object):
 
 
 class QuerySet(object):
-
     def __init__(self, manager, model):
         self.manager = manager
         self.model = model
@@ -78,8 +78,30 @@ class QuerySet(object):
 
         return iter(self.queryset)
 
-    def _connect(self, company):
-        return self.model.client.connect(self.model._meta.page, company)
+    def __getattr__(self, item):
+        log.debug("Calling queryset __getattr__: %s" % item)
+        for codeunit in self.model._meta.codeunit_pages:
+            client = self._connect(codeunit)
+            services = dict((service.lower(), service) for service in
+                            client.get_services())
+            if item in services.keys():
+                def wrapper(*args, **kwargs):
+                    log.debug('called with %r and %r' % (args, kwargs))
+                    companies = self.model.client.companies
+                    for company in companies:
+                        new_client = self._connect(codeunit, company)
+                        func = getattr(new_client, services[service])
+                        return func(*args, **kwargs)
+                return wrapper
+        raise AttributeError(item)
+
+    def _connect(self, company=None, page=None):
+        if not page and company:
+            return self.model.client.connect(self.model._meta.page, company)
+        if not company and page:
+            return self.model.client.connect(page, direct=True)
+
+        return self.model.client.connect(page, company)
 
     def _query(self, client, method, **kwargs):
         # TODO: Implement for central handling of requests
@@ -201,7 +223,8 @@ class QuerySet(object):
                         inst = self.model()
                         inst.populate_attrs(response)
                     inst.add_key(key.company, client,
-                                 getattr(response, self.model._meta.default_id))
+                                 getattr(response,
+                                         self.model._meta.default_id))
             else:
                 # TODO: Does not work for some reason, maybe needs the company
                 companies = self.model.client.companies
@@ -213,7 +236,8 @@ class QuerySet(object):
                         inst = self.model()
                         inst.populate_attrs(response)
                     inst.add_key(company, client,
-                                 getattr(response, self.model._meta.default_id))
+                                 getattr(response,
+                                         self.model._meta.default_id))
 
             return inst
 
@@ -240,12 +264,14 @@ class QuerySet(object):
                     success = True
                     for key in getattr(result, self.model._meta.default_id):
                         if not isinstance(key, Key):
-                            raise TypeError('The list must contain Key objects')
+                            raise TypeError(
+                                'The list must contain Key objects')
                         client = key.client
                         if not client:
                             client = self._connect(key.company)
                         tmp_dict = {self.model._meta.default_id: key.key}
-                        if not getattr(client, self.model._meta.delete)(**tmp_dict):
+                        if not getattr(client, self.model._meta.delete)(
+                                **tmp_dict):
                             success = False
                     if success:
                         tmp_list.pop(tmp_list.index(result))
@@ -259,19 +285,22 @@ class QuerySet(object):
                 if isinstance(keys, list):
                     for key in keys:
                         if not isinstance(key, Key):
-                            raise TypeError('The list must contain Key objects')
+                            raise TypeError(
+                                'The list must contain Key objects')
                         client = key.client
                         if not client:
                             client = self._connect(key.company)
                         tmp_dict = {self.model._meta.default_id: key.key}
-                        if not getattr(client, self.model._meta.delete)(**tmp_dict):
+                        if not getattr(client, self.model._meta.delete)(
+                                **tmp_dict):
                             success = False
 
                 else:
                     companies = self.model.client.companies
                     for company in companies:
                         client = self._connect(company)
-                        if not getattr(client, self.model._meta.delete)(**kwargs):
+                        if not getattr(client, self.model._meta.delete)(
+                                **kwargs):
                             success = False
         return success
 
@@ -339,8 +368,10 @@ class QuerySet(object):
                         found = False
                         for obj in self.queryset:
                             if inst == obj:
-                                obj_keys = getattr(obj, self.model._meta.default_id)
-                                inst_keys = getattr(inst, self.model._meta.default_id)
+                                obj_keys = getattr(obj,
+                                                   self.model._meta.default_id)
+                                inst_keys = getattr(inst,
+                                                    self.model._meta.default_id)
                                 obj_keys.extend(inst_keys)
                                 found = True
 
@@ -405,11 +436,14 @@ class Options(object):
         self.fields = None
         self.default_id = 'Key'
         self.declared_fields = []
-        # Relative codeunits for this page
-        # TODO: Needs work
-        self.codeunits = []
         self.discovered_fields = set()
+        self.codeunit_pages = []
         self._page = None
+
+    def add_default_codeunit_page(self):
+        if not self.codeunit_pages:
+            default_codeunit_page = 'Codeunit/%s' % self.page.split('/')[-1]
+            self.codeunit_pages.append(default_codeunit_page)
 
     @property
     def page(self):
@@ -492,8 +526,10 @@ class BaseModel(type):
                                   field_error[1])
             raise FieldException('Field errors.')
 
-        # Assign the model class to the Options instance
+        # Assign the model class to the Options instance and add the default
+        # codeunit page if is empty
         new_cls._meta.model = new_cls
+        new_cls._meta.add_default_codeunit_page()
 
         return new_cls
 
@@ -524,8 +560,8 @@ class Model(object):
             else:
                 if len(args) > len(self.declared_field_names):
                     raise TypeError('Too many arguments. You can set '
-                                         'only %s'
-                                         % len(self.declared_field_names))
+                                    'only %s'
+                                    % len(self.declared_field_names))
                 for count, arg in enumerate(args):
                     setattr(self, self.declared_field_names[count], arg)
 
