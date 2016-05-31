@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from lather import exceptions
 
 
 class Response(object):
@@ -10,4 +11,16 @@ class Response(object):
 
         for key in self.__keylist__:
             setattr(self, key, dict[key])
+
+
+class MaxLengthValidaiton(object):
+    """
+    Simple validation class
+    """
+    def __init__(self, limit_value):
+        self.limit_value = limit_value
+
+    def __call__(self, value):
+        if len(value) > self.limit_value:
+            raise exceptions.ValidationError('Max length reached')
 

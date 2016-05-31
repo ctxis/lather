@@ -2,9 +2,10 @@
 import pytest
 
 from suds.client import Client
+from suds.transport.http import HttpAuthenticated
 
-from lather import client, models
-from models import *
+from lather import client, models, https, enums
+from .models import *
 
 
 @pytest.mark.usefixtures("mock")
@@ -13,6 +14,28 @@ class TestLatherClient:
     @pytest.fixture
     def latherclient(self):
         return client.LatherClient('test', cache=False)
+
+    def test_make_options_ntlm(self):
+        latherclient = client.LatherClient('test', 'test', 'test')
+        options = latherclient._make_options()
+        assert options['transport']
+        assert isinstance(options['transport'], https.NTLMSSPAuthenticated)
+
+    def test_make_options_basic(self):
+        latherclient = client.LatherClient('test', 'test', 'test',
+                                           enums.AuthEnums.BASIC)
+        options = latherclient._make_options()
+        assert options['transport']
+        assert isinstance(options['transport'], HttpAuthenticated)
+
+    def test_make_options_proxy(self):
+        proxy = dict(
+            http="http://test.local:3128",
+            https="https://test.local:3128"
+        )
+        latherclient = client.LatherClient('test', proxy=proxy)
+        options = latherclient._make_options()
+        assert options['proxy'] == proxy
 
     def test_init(self, latherclient):
         companies = ['Company1', 'Company2', 'Company3', 'Company4']

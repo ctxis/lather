@@ -26,9 +26,6 @@ class Field(object):
         # Special attr for the unresolved fields
         self._blank = False
 
-    def __str__(self):
-        return '%s.%s' % (self.model.__name__, self.name)
-
     def __repr__(self):
         path = '%s.%s' % (self.__class__.__module__, self.__class__.__name__)
         name = getattr(self, 'name', None)

@@ -461,6 +461,24 @@ class TestQueryset:
         assert response.queryset[1].Name == 'Test for example'
         assert response.queryset[2].Name == 'Test3 for example'
 
+## len
+
+    def test_len(self, queryset):
+        response = queryset.filter(No='Test*')
+        assert len(response) == 3
+
+## iter
+
+    def test_iter(self, queryset):
+        response = queryset.filter(No='Test*')
+        for result in response:
+            assert isinstance(result, models.Model)
+
+    def test_iter_without_queryset(self, queryset):
+        queryset.create(No='Test', Name='Test')
+        with pytest.raises(Exception):
+            results = [result for result in queryset]
+
 ## count
 
     def test_count(self, queryset):
@@ -471,3 +489,45 @@ class TestQueryset:
         queryset.create(No='Test', Name='Test')
         with pytest.raises(Exception):
             queryset.count()
+
+
+
+class TestField:
+
+    def test_repr_without_name(self):
+        field = models.Field()
+        assert repr(field) == '<lather.models.Field>'
+
+    def test_repr_with_name(self):
+        field = models.Field(name='Field')
+        assert repr(field) == '<lather.models.Field: Field>'
+
+    def test_run_validators_raise_exception_1(self):
+        field = models.Field(validators=[utils.MaxLengthValidaiton(5)])
+        with pytest.raises(exceptions.ValidationError) as e:
+            field.run_validators('testing')
+        assert e.value.message[0] == 'Max length reached'
+
+    def test_run_validators_raise_exception_2(self):
+        field = models.Field()
+        field._validators.append(utils.MaxLengthValidaiton(5))
+        with pytest.raises(exceptions.ValidationError) as e:
+            field.run_validators('testing')
+        assert e.value.message[0] == 'Max length reached'
+
+    def test_run_validators_not_raise_exception(self):
+        field = models.Field(validators=[utils.MaxLengthValidaiton(10)])
+        try:
+            field.run_validators('testing')
+        except exceptions.ValidationError:
+            pytest.fail('Raised unexcpected ValidationError.')
+
+    def test_clean_with_no_validators(self):
+        field = models.Field()
+        assert field.clean('testing') == 'testing'
+
+    def test_clean_with_validators(self):
+        field = models.Field(validators=[utils.MaxLengthValidaiton(5)])
+        with pytest.raises(exceptions.ValidationError) as e:
+            field.clean('testing')
+        assert e.value.message[0] == 'Max length reached'
