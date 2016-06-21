@@ -760,7 +760,9 @@ class Model(object):
         """
         self.clean()
         tmp_dict = dict((field, getattr(self, field)) for field in
-                        self.declared_field_names)
+                    self.declared_field_names)
+        tmp_dict.update(dict((field, getattr(self, field)) for field in
+                        self._meta.discovered_fields))
 
         if self.get_keys():
             self.objects.update(obj=self, **tmp_dict)

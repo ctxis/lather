@@ -265,6 +265,8 @@ class TestQueryset:
         for key in customer.Key:
             assert isinstance(key, models.Key)
         assert customer.Key[0].key == 'Key'
+        assert customer._meta.declared_fields == []
+        assert len(customer._meta.discovered_fields) == 2
 
     def test_get_raise_objectnotfound(self, queryset):
         queryset.model._meta.get = 'Read_NotFound'
