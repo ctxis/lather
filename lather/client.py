@@ -21,7 +21,8 @@ class WrapperSudsClient(object):
         """
         Creates a suds client
         """
-        log.debug('Calling wrapper __init__: %s', endpoint)
+        log.debug('[%s] Calling wrapper __init__: %s' % (log.name.upper(),
+                                                         endpoint))
         self.client = None
         try:
             self.client = Client(endpoint, **kwargs)
@@ -103,7 +104,10 @@ class LatherClient(object):
         self.companies = [None]
         if self.service == ServiceEnums.NAV:
             self.companies = []
-            self.update_companies()
+            try:
+                self.update_companies()
+            except:
+                pass
 
     def _create_ntlm_auth(self):
         """
