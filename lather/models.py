@@ -121,7 +121,7 @@ class QuerySet(object):
                     raise AttributeError('You have to specify the arg: %s' % k)
 
     @require_client
-    def create(self, obj=None, **kwargs):
+    def create(self, obj=None, companies=None, **kwargs):
         if obj:
             # Send the create action to the appropriate companies
             for key in obj.get_key_objects():
@@ -135,7 +135,8 @@ class QuerySet(object):
                             getattr(response, self.model._meta.default_id))
         else:
             inst = None
-            companies = self.model.client.companies
+            if not companies:
+                companies = self.model.client.companies
             for company in companies:
                 client = self._connect(company)
                 response = getattr(client, self.model._meta.create)(kwargs)
@@ -349,7 +350,7 @@ class QuerySet(object):
 
     @require_client
     @require_default
-    def get_or_create(self, **kwargs):
+    def get_or_create(self, companies=None, **kwargs):
         created = False
         defaults = kwargs.pop('defaults', None)
         try:
@@ -373,7 +374,38 @@ class QuerySet(object):
                                          'at the fields: %s'
                                          % ', '.join(non_declared_fields))
             kwargs.update(defaults)
-            inst = self.create(**kwargs)
+            inst = self.create(companies=companies, **kwargs)
+            created = True
+        return inst, created
+
+    @require_client
+    @require_default
+    def update_or_create(self, companies=None, **kwargs):
+        created = False
+        defaults = kwargs.pop('defaults', None)
+        try:
+            inst = self.get(**kwargs)
+            self.update(inst, **defaults)
+            created = False
+        except ObjectDoesNotExist:
+            # Update the defaults with the kwargs which contains the query
+            # fields
+            duplicate_keys = [key for key in defaults.keys()
+                              if key in kwargs.keys()]
+            if duplicate_keys:
+                raise AttributeError('Duplicate keys at kwargs and defaults: '
+                                     '%s' % ', '.join(duplicate_keys))
+
+            if self.model._meta.declared_fields:
+                non_declared_fields = [key for key in defaults.keys() if
+                                       key not in [f.name for f in
+                                                   self.model._meta.declared_fields]]
+                if non_declared_fields:
+                    raise AttributeError('Some of the keys are not specified '
+                                         'at the fields: %s'
+                                         % ', '.join(non_declared_fields))
+            kwargs.update(defaults)
+            inst = self.create(companies=companies, **kwargs)
             created = True
         return inst, created
 
