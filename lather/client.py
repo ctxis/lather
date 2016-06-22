@@ -4,7 +4,7 @@ import urlparse
 import urllib
 
 from suds.client import Client
-from suds.transport.http import HttpAuthenticated
+from suds.transport.https import HttpAuthenticated
 from suds.plugin import DocumentPlugin
 from suds.transport import TransportError
 
