@@ -17,4 +17,7 @@ class FieldException(Exception):
     pass
 
 
+class InvalidBaseUrlException(Exception):
+    pass
+
 

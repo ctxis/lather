@@ -10,6 +10,7 @@ from suds.plugin import DocumentPlugin
 from .enums import AuthEnums, ServiceEnums
 from .https import NTLMSSPAuthenticated
 from .decorators import *
+from .exceptions import *
 
 log = logging.getLogger('lather_client')
 
@@ -20,16 +21,25 @@ class WrapperSudsClient(object):
         Creates a suds client
         """
         log.debug('Calling wrapper __init__: %s', endpoint)
-        self.client = Client(endpoint, **kwargs)
+        self.client = None
+        try:
+            self.client = Client(endpoint, **kwargs)
+        except ValueError, e:
+            log.error('[%] Failed to make the connection to %s due to '
+                      'this error: %', log.name.upper(), endpoint, e)
+            raise InvalidBaseUrlException('%s, %s' % (e, 'Maybe the base url '
+                                                         'is invalid.'))
 
     def __getattr__(self, item):
         """
         Handle suds service calls
         """
-        log.debug('Calling wrapper __getattr__: %s' % item)
+        log.debug('[%s] Calling wrapper __getattr__: %s' % (log.name.upper(),
+                                                            item))
         if hasattr(self.client.service, item):
             def wrapper(*args, **kwargs):
-                log.debug('called with %r and %r' % (args, kwargs))
+                log.debug('[%s] called with %r and %r' % (log.name.upper(),
+                                                          args, kwargs))
                 func = getattr(self.client.service, item)
                 return func(*args, **kwargs)
 
@@ -41,7 +51,7 @@ class WrapperSudsClient(object):
         """
         Returns the structure of the suds model
         """
-        log.debug('Create factory for %s', name)
+        log.debug('[%s] Create factory for %s' %(log.name.upper(), name))
         return self.client.factory.create(name)
 
     @require_client

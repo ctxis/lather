@@ -79,14 +79,16 @@ class QuerySet(object):
         return iter(self.queryset)
 
     def __getattr__(self, item):
-        log.debug("Calling queryset __getattr__: %s" % item)
+        log.debug('[%s] Calling queryset __getattr__: %s' % (log.name.upper(),
+                                                             item))
         for codeunit in self.model._meta.codeunit_pages:
             client = self._connect(codeunit)
             services = dict((service.lower(), service) for service in
                             client.get_services())
             if item in services.keys():
                 def wrapper(*args, **kwargs):
-                    log.debug('called with %r and %r' % (args, kwargs))
+                    log.debug('[%s] called with %r and %r' % (log.name.upper(),
+                                                              args, kwargs))
                     companies = self.model.client.companies
                     for company in companies:
                         # TODO: Create dynamically a new class from Model
@@ -159,8 +161,8 @@ class QuerySet(object):
             response = iter(getattr(client, self.model._meta.all)())
 
             for result in response:
-                log.debug('From the company %s we got the result: %s'
-                          % (company, result))
+                log.debug('[%s] From the company %s we got the result: %s'
+                          % (log.name.upper(), company, result))
                 inst = self.model()
                 inst.populate_attrs(result)
                 inst.add_key(company, client,
@@ -384,6 +386,7 @@ class QuerySet(object):
         created = False
         defaults = kwargs.pop('defaults', None)
         try:
+            #TODO: If multiple results returned handle them seperetaly
             inst = self.get(**kwargs)
             self.update(inst, **defaults)
             created = False
@@ -432,8 +435,8 @@ class QuerySet(object):
                     continue
 
                 for result in response:
-                    log.debug('From the company %s we got the result: %s'
-                              % (company, result))
+                    log.debug('[%s] From the company %s we got the result: %s'
+                              % (log.name.upper(), company, result))
                     inst = self.model()
                     inst.populate_attrs(result)
                     inst.add_key(company, client,
@@ -472,10 +475,12 @@ class Manager(object):
         self.model = model
 
     def __getattr__(self, item):
-        log.debug("Calling manager __getattr__: %s" % item)
+        log.debug('[%s] Calling manager __getattr__: %s' % (log.name.upper(),
+                                                            item))
         if hasattr(QuerySet, item):
             def wrapper(*args, **kwargs):
-                log.debug('called with %r and %r' % (args, kwargs))
+                log.debug('[%s] called with %r and %r' % (log.name.upper(),
+                                                          args, kwargs))
                 queryset = QuerySet(self, self.model)
                 func = getattr(queryset, item)
                 return func(*args, **kwargs)
@@ -662,7 +667,8 @@ class Model(object):
         fields and the current one doesn't contain these field causing the
         __eq__ to fail because of AttributeError)
         """
-        log.debug("Calling model __getattr__: %s" % item)
+        log.debug('[%s] Calling model __getattr__: %s' % (log.name.upper(),
+                                                          item))
         if item in self._meta.discovered_fields:
             return None
         else:
