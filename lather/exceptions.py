@@ -21,3 +21,5 @@ class InvalidBaseUrlException(Exception):
     pass
 
 
+class ConnectionError(Exception):
+    pass

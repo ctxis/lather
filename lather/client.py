@@ -6,6 +6,7 @@ import urllib
 from suds.client import Client
 from suds.transport.http import HttpAuthenticated
 from suds.plugin import DocumentPlugin
+from suds.transport import TransportError
 
 from .enums import AuthEnums, ServiceEnums
 from .https import NTLMSSPAuthenticated
@@ -26,9 +27,13 @@ class WrapperSudsClient(object):
             self.client = Client(endpoint, **kwargs)
         except ValueError, e:
             log.error('[%] Failed to make the connection to %s due to '
-                      'this error: %', log.name.upper(), endpoint, e)
+                      'this error: %s' % (log.name.upper(), endpoint, e))
             raise InvalidBaseUrlException('%s, %s' % (e, 'Maybe the base url '
                                                          'is invalid.'))
+        except TransportError, e:
+            log.error('[%s] Failed to make the connection to %s due to '
+                      'this error: %s' % (log.name.upper(), endpoint, e))
+            raise ConnectionError('Connection error: %s' % e)
 
     def __getattr__(self, item):
         """
