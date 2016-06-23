@@ -238,43 +238,83 @@ class QuerySet(object):
     @require_client
     def update(self, obj=None, companies=None, **kwargs):
         if obj:
-            # Finally we will have:
-            # companies: contains new companies and will create
-            # update_companies: contains existing companies and will update
-            # delete_companies: contains deleted companies and will delete
-            existing_companies = obj.get_companies()
-            delete_companies = []
-            if companies:
-                update_companies = []
-                for company in existing_companies:
-                    if company in companies:
-                        update_companies.append(company)
-                        companies.pop(companies.index(company))
+            if self.queryset:
+                for inst in self.queryset:
+                    # Finally we will have:
+                    # companies: contains new companies and will create
+                    # update_companies: contains existing companies and will update
+                    # delete_companies: contains deleted companies and will delete
+                    existing_companies = inst.get_companies()
+                    delete_companies = []
+                    if companies:
+                        update_companies = []
+                        for company in existing_companies:
+                            if company in companies:
+                                update_companies.append(company)
+                                companies.pop(companies.index(company))
+                            else:
+                                delete_companies.append(company)
                     else:
-                        delete_companies.append(company)
+                        update_companies = existing_companies[:]
+
+
+                    for key in inst.get_key_objects():
+                        if key.company in update_companies:
+                            kwargs.update({self.model._meta.default_id: key.key})
+                            client = key.client
+                            if not client:
+                                client = self._connect(key.company)
+
+                            response = getattr(client, self.model._meta.update)(kwargs)
+                            inst.populate_attrs(response)
+                            inst.add_key(key.company, client,
+                                        getattr(response, self.model._meta.default_id))
+                        elif key.company in delete_companies:
+                            tmp_dict = {self.model._meta.default_id: key.key}
+                            self.delete(**tmp_dict)
+                            inst.remove_key(key)
+                    # Now create the new entries
+                    if companies:
+                        inst.add_companies(companies)
+                        inst.save()
             else:
-                update_companies = existing_companies[:]
+                # Finally we will have:
+                # companies: contains new companies and will create
+                # update_companies: contains existing companies and will update
+                # delete_companies: contains deleted companies and will delete
+                existing_companies = obj.get_companies()
+                delete_companies = []
+                if companies:
+                    update_companies = []
+                    for company in existing_companies:
+                        if company in companies:
+                            update_companies.append(company)
+                            companies.pop(companies.index(company))
+                        else:
+                            delete_companies.append(company)
+                else:
+                    update_companies = existing_companies[:]
 
 
-            for key in obj.get_key_objects():
-                if key.company in update_companies:
-                    kwargs.update({self.model._meta.default_id: key.key})
-                    client = key.client
-                    if not client:
-                        client = self._connect(key.company)
+                for key in obj.get_key_objects():
+                    if key.company in update_companies:
+                        kwargs.update({self.model._meta.default_id: key.key})
+                        client = key.client
+                        if not client:
+                            client = self._connect(key.company)
 
-                    response = getattr(client, self.model._meta.update)(kwargs)
-                    obj.populate_attrs(response)
-                    obj.add_key(key.company, client,
-                                getattr(response, self.model._meta.default_id))
-                elif key.company in delete_companies:
-                    tmp_dict = {self.model._meta.default_id: key.key}
-                    self.delete(**tmp_dict)
-                    obj.remove_key(key)
-            # Now create the new entries
-            if companies:
-                obj.add_companies(companies)
-                obj.save()
+                        response = getattr(client, self.model._meta.update)(kwargs)
+                        obj.populate_attrs(response)
+                        obj.add_key(key.company, client,
+                                    getattr(response, self.model._meta.default_id))
+                    elif key.company in delete_companies:
+                        tmp_dict = {self.model._meta.default_id: key.key}
+                        self.delete(**tmp_dict)
+                        obj.remove_key(key)
+                # Now create the new entries
+                if companies:
+                    obj.add_companies(companies)
+                    obj.save()
         else:
             inst = None
             keys = kwargs.pop(self.model._meta.default_id, None)
