@@ -234,6 +234,13 @@ class TestModel:
         inst2 = test_models.TestModel1('Args1', 'Args2')
         assert inst1 == inst2
 
+    def test_get_companies(self):
+        companies = ['Company1', 'Company2']
+        inst = test_models.TestModel2()
+        inst.add_companies(companies)
+
+        assert inst.get_companies() == companies
+
 
 @pytest.mark.usefixtures("mock")
 class TestQueryset:

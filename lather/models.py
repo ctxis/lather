@@ -243,14 +243,18 @@ class QuerySet(object):
             # update_companies: contains existing companies and will update
             # delete_companies: contains deleted companies and will delete
             existing_companies = obj.get_companies()
-            update_companies = []
             delete_companies = []
-            for company in existing_companies:
-                if company in companies:
-                    update_companies.append(company)
-                    companies.pop(companies.index(company))
-                else:
-                    delete_companies.append(company)
+            if companies:
+                update_companies = []
+                for company in existing_companies:
+                    if company in companies:
+                        update_companies.append(company)
+                        companies.pop(companies.index(company))
+                    else:
+                        delete_companies.append(company)
+            else:
+                update_companies = existing_companies[:]
+
 
             for key in obj.get_key_objects():
                 if key.company in update_companies:
