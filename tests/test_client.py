@@ -2,7 +2,7 @@
 import pytest
 
 from suds.client import Client
-from suds.transport.http import HttpAuthenticated
+from suds.transport.https import HttpAuthenticated
 
 from lather import client, models, https, enums
 from .models import *

@@ -758,6 +758,17 @@ class Model(object):
 
         return keys
 
+    def get_companies(self):
+        """
+        Return all the companies for this object
+        """
+        companies = []
+        for key in getattr(self, self._meta.default_id):
+            if key.company:
+                companies.append(key.company)
+
+        return companies
+
     def get_key_objects(self):
         """
         Return the the Key objects
