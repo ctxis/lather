@@ -236,18 +236,41 @@ class QuerySet(object):
             raise ObjectDoesNotExist('Object not found')
 
     @require_client
-    def update(self, obj=None, **kwargs):
+    def update(self, obj=None, companies=None, **kwargs):
         if obj:
-            for key in obj.get_key_objects():
-                kwargs.update({self.model._meta.default_id: key.key})
-                client = key.client
-                if not client:
-                    client = self._connect(key.company)
+            # Finally we will have:
+            # companies: contains new companies and will create
+            # update_companies: contains existing companies and will update
+            # delete_companies: contains deleted companies and will delete
+            existing_companies = obj.get_companies()
+            update_companies = []
+            delete_companies = []
+            for company in existing_companies:
+                if company in companies:
+                    update_companies.append(company)
+                    companies.pop(companies.index(company))
+                else:
+                    delete_companies.append(company)
 
-                response = getattr(client, self.model._meta.update)(kwargs)
-                obj.populate_attrs(response)
-                obj.add_key(key.company, client,
-                            getattr(response, self.model._meta.default_id))
+            for key in obj.get_key_objects():
+                if key.company in update_companies:
+                    kwargs.update({self.model._meta.default_id: key.key})
+                    client = key.client
+                    if not client:
+                        client = self._connect(key.company)
+
+                    response = getattr(client, self.model._meta.update)(kwargs)
+                    obj.populate_attrs(response)
+                    obj.add_key(key.company, client,
+                                getattr(response, self.model._meta.default_id))
+                elif key.company in delete_companies:
+                    tmp_dict = {self.model._meta.default_id: key.key}
+                    self.delete(**tmp_dict)
+                    obj.remove_key(key)
+            # Now create the new entries
+            if companies:
+                obj.add_companies(companies)
+                obj.save()
         else:
             inst = None
             keys = kwargs.pop(self.model._meta.default_id, None)
@@ -273,7 +296,8 @@ class QuerySet(object):
                                          self.model._meta.default_id))
             else:
                 # TODO: Does not work for some reason, maybe needs the company
-                companies = self.model.client.companies
+                if not companies:
+                    companies = self.model.client.companies
                 for company in companies:
                     client = self._connect(company)
                     kwargs.update({self.model._meta.default_id: keys})
@@ -388,7 +412,7 @@ class QuerySet(object):
         try:
             #TODO: If multiple results returned handle them seperetaly
             inst = self.get(**kwargs)
-            self.update(inst, **defaults)
+            self.update(inst, companies, **defaults)
             created = False
         except ObjectDoesNotExist:
             # Update the defaults with the kwargs which contains the query
@@ -733,6 +757,19 @@ class Model(object):
         for company in companies:
             keys = getattr(self, self._meta.default_id)
             keys.append(Key(company))
+
+    def remove_key(self, key):
+        """
+        Removes a Key instance from the default_id attribute
+        """
+        index = None
+        for count, _key in enumerate(getattr(self, self._meta.default_id)):
+            if _key.key == key:
+                index = count
+                break
+
+        if index:
+            getattr(self, self._meta.default_id).pop(index)
 
     def add_key(self, company, client, key):
         """
