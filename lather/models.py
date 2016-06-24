@@ -97,18 +97,28 @@ class QuerySet(object):
                         new_client = self._connect(codeunit, company)
                         func = getattr(new_client, services[service])
                         return func(*args, **kwargs)
+
                 return wrapper
         raise AttributeError(item)
 
     def _connect(self, company=None, page=None):
+        """
+        Central method which makes the connection to the api
+        """
         if not page:
             page = self.model._meta.page
 
         return self.model.client.connect(page, company)
 
     def _query(self, client, method, **kwargs):
-        # TODO: Implement for central handling of requests
-        pass
+        """
+        Central method which executes the api calls
+        """
+        if not method:
+            raise TypeError('Method must be string not None.')
+        if kwargs.get('attrs', None):
+            return getattr(client, method)(kwargs.get('attrs'))
+        return getattr(client, method)(**kwargs)
 
     def _check_kwargs(self, method, **kwargs):
         params = self.model.client.get_service_params(method,
@@ -127,11 +137,19 @@ class QuerySet(object):
         if obj:
             # Send the create action to the appropriate companies
             for key in obj.get_key_objects():
+                # If the key object contains the key attribute then came from
+                # the update_or_create() -> update() -> create() because the
+                # user added some new companies, so the instance contains
+                # some key objects with key
+                if key.key:
+                    continue
                 client = key.client
                 if not client:
                     client = self._connect(key.company)
 
-                response = getattr(client, self.model._meta.create)(kwargs)
+                attrs = dict(attrs=kwargs)
+                response = self._query(client, self.model._meta.create,
+                                       **attrs)
                 obj.populate_attrs(response)
                 obj.add_key(key.company, client,
                             getattr(response, self.model._meta.default_id))
@@ -141,7 +159,9 @@ class QuerySet(object):
                 companies = self.model.client.companies
             for company in companies:
                 client = self._connect(company)
-                response = getattr(client, self.model._meta.create)(kwargs)
+                attrs = dict(attrs=kwargs)
+                response = self._query(client, self.model._meta.create,
+                                       **attrs)
                 if not inst:
                     inst = self.model()
                     inst.populate_attrs(response)
@@ -157,8 +177,7 @@ class QuerySet(object):
         for company in companies:
             client = self._connect(company)
 
-            # TODO: Try pipe filters
-            response = iter(getattr(client, self.model._meta.all)())
+            response = iter(self._query(client, self.model._meta.all))
 
             for result in response:
                 log.debug('[%s] From the company %s we got the result: %s'
@@ -197,7 +216,8 @@ class QuerySet(object):
             # When the result is None the suds raise AttributeError, handle
             # this error to return ObjectNotFound
             try:
-                response = getattr(client, self.model._meta.get)(**kwargs)
+                # response = getattr(client, self.model._meta.get)(**kwargs)
+                response = self._query(client, self.model._meta.get, **kwargs)
             except AttributeError:
                 continue
 
@@ -238,6 +258,8 @@ class QuerySet(object):
     @require_client
     def update(self, obj=None, companies=None, **kwargs):
         if obj:
+            # This if will be true when the previous funciton is the
+            # update_or_create
             if self.queryset:
                 for inst in self.queryset:
                     # Finally we will have:
@@ -257,20 +279,24 @@ class QuerySet(object):
                     else:
                         update_companies = existing_companies[:]
 
-
                     for key in inst.get_key_objects():
                         if key.company in update_companies:
-                            kwargs.update({self.model._meta.default_id: key.key})
+                            kwargs.update(
+                                {self.model._meta.default_id: key.key})
                             client = key.client
                             if not client:
                                 client = self._connect(key.company)
 
-                            response = getattr(client, self.model._meta.update)(kwargs)
+                            attrs = dict(attrs=kwargs)
+                            response = self._query(client,
+                                                   self.model._meta.update,
+                                                   **attrs)
                             inst.populate_attrs(response)
                             inst.add_key(key.company, client,
-                                        getattr(response, self.model._meta.default_id))
+                                         getattr(response,
+                                                 self.model._meta.default_id))
                         elif key.company in delete_companies:
-                            tmp_dict = {self.model._meta.default_id: key.key}
+                            tmp_dict = {self.model._meta.default_id: str(key.key)}
                             self.delete(**tmp_dict)
                             inst.remove_key(key)
                     # Now create the new entries
@@ -278,43 +304,18 @@ class QuerySet(object):
                         inst.add_companies(companies)
                         inst.save()
             else:
-                # Finally we will have:
-                # companies: contains new companies and will create
-                # update_companies: contains existing companies and will update
-                # delete_companies: contains deleted companies and will delete
-                existing_companies = obj.get_companies()
-                delete_companies = []
-                if companies:
-                    update_companies = []
-                    for company in existing_companies:
-                        if company in companies:
-                            update_companies.append(company)
-                            companies.pop(companies.index(company))
-                        else:
-                            delete_companies.append(company)
-                else:
-                    update_companies = existing_companies[:]
-
-
                 for key in obj.get_key_objects():
-                    if key.company in update_companies:
-                        kwargs.update({self.model._meta.default_id: key.key})
-                        client = key.client
-                        if not client:
-                            client = self._connect(key.company)
+                    kwargs.update({self.model._meta.default_id: key.key})
+                    client = key.client
+                    if not client:
+                        client = self._connect(key.company)
 
-                        response = getattr(client, self.model._meta.update)(kwargs)
-                        obj.populate_attrs(response)
-                        obj.add_key(key.company, client,
-                                    getattr(response, self.model._meta.default_id))
-                    elif key.company in delete_companies:
-                        tmp_dict = {self.model._meta.default_id: key.key}
-                        self.delete(**tmp_dict)
-                        obj.remove_key(key)
-                # Now create the new entries
-                if companies:
-                    obj.add_companies(companies)
-                    obj.save()
+                    attrs = dict(attrs=kwargs)
+                    response = self._query(client, self.model._meta.update,
+                                           **attrs)
+                    obj.populate_attrs(response)
+                    obj.add_key(key.company, client,
+                                getattr(response, self.model._meta.default_id))
         else:
             inst = None
             keys = kwargs.pop(self.model._meta.default_id, None)
@@ -365,7 +366,8 @@ class QuerySet(object):
                 if not client:
                     client = self._connect(key.company)
                 tmp_dict = {self.model._meta.default_id: key.key}
-                if not getattr(client, self.model._meta.delete)(**tmp_dict):
+                if not self._query(client, self.model._meta.delete,
+                                   **tmp_dict):
                     success = False
         else:
             # Send the delete action to all the companies
@@ -384,8 +386,8 @@ class QuerySet(object):
                         if not client:
                             client = self._connect(key.company)
                         tmp_dict = {self.model._meta.default_id: key.key}
-                        if not getattr(client, self.model._meta.delete)(
-                                **tmp_dict):
+                        if not self._query(client, self.model._meta.delete,
+                                           **tmp_dict):
                             success = False
                     if success:
                         tmp_list.pop(tmp_list.index(result))
@@ -405,17 +407,23 @@ class QuerySet(object):
                         if not client:
                             client = self._connect(key.company)
                         tmp_dict = {self.model._meta.default_id: key.key}
-                        if not getattr(client, self.model._meta.delete)(
-                                **tmp_dict):
+                        if not self._query(client, self.model._meta.delete,
+                                           **tmp_dict):
                             success = False
 
                 else:
                     companies = self.model.client.companies
                     for company in companies:
                         client = self._connect(company)
-                        if not getattr(client, self.model._meta.delete)(
-                                **kwargs):
-                            success = False
+                        # TODO: catch more accurate the error: Webfault
+                        # because whenever tries to delete somthing which
+                        # doesn't exist raise this error
+                        try:
+                            if not self._query(client, self.model._meta.delete,
+                                           **kwargs):
+                                success = False
+                        except:
+                            continue
         return success
 
     @require_client
@@ -423,6 +431,13 @@ class QuerySet(object):
     def get_or_create(self, companies=None, **kwargs):
         created = False
         defaults = kwargs.pop('defaults', None)
+        # Sometimes, the returning object doesn't contain all the attributes
+        # from the defaults so if you specify a new value to an atttibute
+        # contained in the defaults but not in the returned object, it will not
+        # saved, so we are going to add this attributes to the declared_fields
+        if not self.model._meta.declared_fields:
+            self.model._meta.add_declared_fields_from_names(defaults.keys())
+
         try:
             inst = self.get(**kwargs)
             created = False
@@ -437,8 +452,7 @@ class QuerySet(object):
 
             if self.model._meta.declared_fields:
                 non_declared_fields = [key for key in defaults.keys() if
-                                       key not in [f.name for f in
-                                                   self.model._meta.declared_fields]]
+                                       key not in self.model._meta.get_declared_field_names()]
                 if non_declared_fields:
                     raise AttributeError('Some of the keys are not specified '
                                          'at the fields: %s'
@@ -453,8 +467,11 @@ class QuerySet(object):
     def update_or_create(self, companies=None, **kwargs):
         created = False
         defaults = kwargs.pop('defaults', None)
+        # Same as above
+        if not self.model._meta.declared_fields:
+            self.model._meta.add_declared_fields_from_names(defaults.keys())
+
         try:
-            #TODO: If multiple results returned handle them seperetaly
             inst = self.get(**kwargs)
             self.update(inst, companies, **defaults)
             created = False
@@ -469,8 +486,7 @@ class QuerySet(object):
 
             if self.model._meta.declared_fields:
                 non_declared_fields = [key for key in defaults.keys() if
-                                       key not in [f.name for f in
-                                                   self.model._meta.declared_fields]]
+                                       key not in self.model._meta.get_declared_field_names()]
                 if non_declared_fields:
                     raise AttributeError('Some of the keys are not specified '
                                          'at the fields: %s'
@@ -585,8 +601,9 @@ class Options(object):
         self.fields = None
         self.default_id = 'Key'
         self.declared_fields = []
-        self.discovered_fields = set()
+        self.discovered_fields = []
         self.codeunit_pages = []
+        self.readonly_fields = []
         self._page = None
 
     def add_default_codeunit_page(self):
@@ -606,6 +623,56 @@ class Options(object):
     @page.setter
     def page(self, value):
         self._page = value
+
+    def get_field_names(self):
+        """
+        Return a list of names of all the fields (declared and discovered)
+        """
+        return list(set([f.name for f in self.declared_fields] +
+                        [f.name for f in self.discovered_fields]))
+
+    def get_declared_field_names(self):
+        """
+        Return a list of names of the declared fields
+        """
+        return [f.name for f in self.declared_fields]
+
+    def get_discovered_field_names(self):
+        """
+        Return a list of names of the declared fields
+        """
+        return [f.name for f in self.discovered_fields]
+
+    def add_declared_fields_from_names(self, fields):
+        """
+        Create field objects from the field names
+        """
+        if not isinstance(fields, list):
+            raise TypeError('This function expects list of field names.')
+
+        if len(fields) != len(set(fields)):
+            raise TypeError('The fields attribute contains duplicate field '
+                            'names.')
+
+        for f in set(fields):
+            self.add_declared_field_from_name(f)
+
+    def add_declared_field_from_name(self, field):
+        """
+        Create declared field object from the field name
+        """
+        if field not in self.get_declared_field_names():
+            f = Field(name=field)
+            self.declared_fields.append(f)
+
+    def add_discovered_field_from_name(self, field):
+        """
+        Create discovered field object from the field name
+        """
+        if field not in self.get_discovered_field_names() \
+                and field not in self.get_declared_field_names():
+            f = Field(name=field)
+            self.discovered_fields.append(f)
 
 
 class BaseModel(type):
@@ -691,9 +758,6 @@ class Model(object):
     def __init__(self, *args, **kwargs):
         # Initialize the default_id to an empty list
         setattr(self, self._meta.default_id, [])
-        # For our purposes, keep the names of the fields
-        self.declared_field_names = [f.name for f in
-                                     self._meta.declared_fields]
 
         # Initialize attributes to the field default value
         for field in self._meta.declared_fields:
@@ -707,24 +771,24 @@ class Model(object):
                 raise TypeError(
                     'You cannot pass args without specifing custom fields.')
             else:
-                if len(args) > len(self.declared_field_names):
+                if len(args) > len(self._meta.get_declared_field_names()):
                     raise TypeError('Too many arguments. You can set '
                                     'only %s'
-                                    % len(self.declared_field_names))
+                                    % len(self._meta.declared_fields))
                 for count, arg in enumerate(args):
-                    setattr(self, self.declared_field_names[count], arg)
+                    setattr(self, self._meta.declared_fields[count].name, arg)
 
         if kwargs:
             if not self._meta.declared_fields:
                 for k in kwargs:
-                    setattr(self, k, kwargs.get(k))
-                    # Because the declared_field_names is empty, add the field
-                    # name from the kwargs because it will be needed at the
+                    # Because the declared_fields is empty, add field
+                    # from the kwargs because it will be needed at the
                     # save
-                    self.declared_field_names.append(k)
+                    self._meta.add_declared_field_from_name(k)
+                    setattr(self, k, kwargs.get(k))
             else:
                 for k in kwargs:
-                    if k not in self.declared_field_names:
+                    if k not in self._meta.get_declared_field_names():
                         raise TypeError(
                             "'%s' is an invalid keyword argument" % k)
                     setattr(self, k, kwargs.get(k))
@@ -737,7 +801,7 @@ class Model(object):
         """
         log.debug('[%s] Calling model __getattr__: %s' % (log.name.upper(),
                                                           item))
-        if item in self._meta.discovered_fields:
+        if item in self._meta.get_discovered_field_names():
             return None
         else:
             AttributeError(item)
@@ -746,9 +810,7 @@ class Model(object):
         """
         Exam if two objects are equal
         """
-        # TODO: Run the super?
-        for field in set(
-                self.declared_field_names) | self._meta.discovered_fields:
+        for field in self._meta.get_field_names():
             try:
                 if getattr(self, field) != getattr(other, field):
                     return False
@@ -760,9 +822,8 @@ class Model(object):
         """
         Add undeclared fields from the reponse to the discovered_fields
         """
-        if attr not in self.declared_field_names and \
-                        attr != self._meta.default_id:
-            self._meta.discovered_fields.add(attr)
+        if attr != self._meta.default_id:
+            self._meta.add_discovered_field_from_name(attr)
 
     def populate_attrs(self, response):
         # Remove key from the keylist because it's handled from the add_key
@@ -776,7 +837,7 @@ class Model(object):
         # the model definition, add them with the default value.
         # unresolved_fields: contains the field names which are specified but
         # they don't contained to the response
-        unresolved_fields = self.declared_field_names[:]
+        unresolved_fields = self._meta.get_declared_field_names()
         for attr in response.__keylist__:
             try:
                 unresolved_fields.pop(unresolved_fields.index(attr))
@@ -889,12 +950,16 @@ class Model(object):
         Saves or updates the object
         """
         self.clean()
+        # Create dict with all the fields (declared and discovered)
+        # TODO: add reaonly fields to ignore at this point because some of them
+        # maybe cannot handle it from the backend
         tmp_dict = dict((field, getattr(self, field)) for field in
-                    self.declared_field_names)
-        tmp_dict.update(dict((field, getattr(self, field)) for field in
-                        self._meta.discovered_fields))
+                        self._meta.get_field_names() if
+                        field not in self._meta.readonly_fields)
 
-        if self.get_keys():
+        # If there wans't any change at the companies just update, otherwise
+        # run create which handles these new companies
+        if len(self.get_keys()) == len(self.get_companies()):
             self.objects.update(obj=self, **tmp_dict)
         else:
             self.objects.create(obj=self, **tmp_dict)

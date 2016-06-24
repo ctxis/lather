@@ -177,8 +177,8 @@ class TestModel:
 
     def test_init_with_kwargs_3(self):
         inst = test_models.TestModel3(var_test_1='Args1', var_test_2='Args2')
-        assert len(inst.declared_field_names) == 2
-        assert len(inst._meta.declared_fields) == 0
+
+        assert len(inst._meta.declared_fields) == 2
         assert len(inst._meta.discovered_fields) == 0
         assert inst.var_test_1 == 'Args1'
         assert inst.var_test_2 == 'Args2'

@@ -1,2 +1,3 @@
 suds==0.4
+termcolor
 https://github.com/ctxis/python-ntlm3/archive/master.zip
