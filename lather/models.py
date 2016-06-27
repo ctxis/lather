@@ -206,11 +206,12 @@ class QuerySet(object):
         return self
 
     @require_client
-    def get(self, **kwargs):
+    def get(self, companies=None, **kwargs):
         self._check_kwargs(self.model._meta.get, **kwargs)
 
         self.queryset = []
-        companies = self.model.client.companies
+        if not companies:
+            companies = self.model.client.companies
         for company in companies:
             client = self._connect(company)
             # When the result is None the suds raise AttributeError, handle
@@ -439,7 +440,7 @@ class QuerySet(object):
             self.model._meta.add_declared_fields_from_names(defaults.keys())
 
         try:
-            inst = self.get(**kwargs)
+            inst = self.get(companies, **kwargs)
             created = False
         except ObjectDoesNotExist:
             # Update the defaults with the kwargs which contains the query
@@ -472,7 +473,7 @@ class QuerySet(object):
             self.model._meta.add_declared_fields_from_names(defaults.keys())
 
         try:
-            inst = self.get(**kwargs)
+            inst = self.get(companies, **kwargs)
             self.update(inst, companies, **defaults)
             created = False
         except ObjectDoesNotExist:
