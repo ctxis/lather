@@ -39,7 +39,8 @@ class TestLatherClient:
 
     def test_init(self, latherclient):
         companies = ['Company1', 'Company2', 'Company3', 'Company4']
-        assert latherclient.companies == companies
+
+        assert set(latherclient.companies) == set(companies)
 
     def test_connect(self, latherclient):
         wrappersudsclient = latherclient.connect('Customer')

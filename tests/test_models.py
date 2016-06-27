@@ -283,21 +283,23 @@ class TestQueryset:
     def test_get_return_multiple_objs_1(self, queryset):
         queryset.model._meta.get = 'Read_Diff'
         customer = queryset.get(No='Test')
+        customers = [c for c in customer]
+
         assert isinstance(customer, models.QuerySet)
         assert len(customer.queryset) == 2
-        customers = [c for c in customer]
-        assert len(customers[0].Key) == 1
-        assert customers[0].Name == 'Test_Diff'
-        assert len(customers[1].Key) == 3
-        assert customers[1].Name == 'Test'
+        assert len(customers[0].Key) == 3
+        assert customers[1].Name == 'Test_Diff'
+        assert len(customers[1].Key) == 1
+        assert customers[0].Name == 'Test'
 
     def test_get_return_multiple_objs_2(self, queryset):
         queryset.model._meta.get = 'Read_Diff'
         customer = queryset.get(No='Test')
         customers = [c for c in customer]
-        assert len(customers[1].Key) == 3
-        assert customers[1].Key[0].key == 'Key1'
-        assert customers[1].Key[1].key == 'Key0'
+
+        assert len(customers[0].Key) == 3
+        assert customers[0].Key[0].key == 'Key0'
+        assert customers[0].Key[2].key == 'Key1'
 
     def test_get_raise_error_providing_false_kwargs(self, queryset):
         with pytest.raises(AttributeError):
