@@ -1,11 +1,13 @@
 <Soap:Envelope xmlns:Soap="http://schemas.xmlsoap.org/soap/envelope/">
     <Soap:Body>
+        {% if result %}
         <Read_Result xmlns="urn:microsoft-dynamics-schemas/page/customer">
             <Customer>
-                <Key>Key</Key>
-                <No>TEST</No>
-                <Name>Test</Name>
+                <Key>{{ key|default('Key') }}</Key>
+                <No>{{ no|default('TEST') }}</No>
+                <Name>{{ name|default('Test') }}</Name>
             </Customer>
         </Read_Result>
+        {% endif %}
     </Soap:Body>
 </Soap:Envelope>

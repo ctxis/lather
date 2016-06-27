@@ -1,7 +1,0 @@
-<Soap:Envelope xmlns:Soap="http://schemas.xmlsoap.org/soap/envelope/">
-    <Soap:Body>
-        <Delete_Result xmlns="urn:microsoft-dynamics-schemas/page/customer">
-            <Delete_Result>false</Delete_Result>
-        </Delete_Result>
-    </Soap:Body>
-</Soap:Envelope>

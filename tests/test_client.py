@@ -18,6 +18,7 @@ class TestLatherClient:
     def test_make_options_ntlm(self):
         latherclient = client.LatherClient('test', 'test', 'test')
         options = latherclient._make_options()
+
         assert options['transport']
         assert isinstance(options['transport'], https.NTLMSSPAuthenticated)
 
@@ -25,6 +26,7 @@ class TestLatherClient:
         latherclient = client.LatherClient('test', 'test', 'test',
                                            enums.AuthEnums.BASIC)
         options = latherclient._make_options()
+
         assert options['transport']
         assert isinstance(options['transport'], HttpAuthenticated)
 
@@ -35,6 +37,7 @@ class TestLatherClient:
         )
         latherclient = client.LatherClient('test', proxy=proxy)
         options = latherclient._make_options()
+
         assert options['proxy'] == proxy
 
     def test_init(self, latherclient):
@@ -44,16 +47,19 @@ class TestLatherClient:
 
     def test_connect(self, latherclient):
         wrappersudsclient = latherclient.connect('Customer')
+
         assert isinstance(wrappersudsclient, client.WrapperSudsClient)
 
     def test_register(self, latherclient):
         latherclient.register(TestModel1)
+
         assert latherclient.models == [TestModel1]
         assert TestModel1.client == latherclient
         assert isinstance(TestModel1.objects, models.Manager)
 
     def test_get_service_params(self, latherclient):
         params = latherclient.get_service_params('Read', 'Customer')
+
         assert len(params) == 1
         assert str(params[0][0]) == 'No'
 
@@ -70,6 +76,7 @@ class TestWrapperSudsClient:
 
     def test_getattr_1(self, wrappersudsclient):
         response = wrappersudsclient.Read(No='Test')
+
         assert response.Key == 'Key'
 
     def test_getattr_1(self, wrappersudsclient):
@@ -82,10 +89,12 @@ class TestWrapperSudsClient:
             'Read', 'GetRecIdFromKey', 'Create', 'ReadByRecId', 'Update',
             'UpdateMultiple', 'IsUpdated', 'Delete_Fail', 'Read_NotFound',
             'Delete']
+
         assert wrappersudsclient.get_services() == services
 
     def test_get_service_params(self, wrappersudsclient):
         params = wrappersudsclient.get_service_params('Read')
+
         assert len(params) == 1
         assert str(params[0][0]) == 'No'
 

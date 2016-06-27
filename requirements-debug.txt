@@ -1,6 +1,7 @@
 -r requirements.txt
 
 Django
+jinja2
 pytest
 pytest-cov
 coveralls

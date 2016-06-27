@@ -2,6 +2,8 @@
 import pytest
 import os
 
+from jinja2 import Environment, FileSystemLoader
+
 from suds.transport.http import HttpTransport
 from suds.reader import DocumentReader
 from suds.sax.parser import Parser
@@ -39,18 +41,40 @@ def send(transport, request):
     if len(info) == 3:
         company = info[0]
 
-    if company and company == 'Company1' and method == 'read_diff':
-        filename = 'mocks/read_diff_company1.xml'
-    elif company and company == 'Company2' and method == 'read_diff':
-        filename = 'mocks/read_diff_company2.xml'
-    elif company and company == 'Company1' and method == 'delete_diff':
-        filename = 'mocks/delete_diff_company1.xml'
+    tmp = method
+    if method.startswith('read') and method != 'readmultiple':
+        tmp = 'read'
+    elif method.startswith('delete'):
+        tmp = 'delete'
+
+    filename = '%s.xml' % tmp
+    loader = FileSystemLoader(os.path.join(os.path.dirname(__file__), 'mocks'))
+    env = Environment(loader=loader, trim_blocks=True)
+    template = env.get_template(filename)
+
+    if method == 'read':
+        response = template.render(result=True)
+    elif method == 'read_notfound':
+        response = template.render(result=False)
+    elif method == 'read_diff':
+        if company == 'Company1':
+            response = template.render(result=True, key='Key0', no='TEST', name='Test_Diff')
+        elif company == 'Company2':
+            response = template.render(result=True, key='Key1', no='TEST', name='Test')
+        else:
+            response = template.render(result=True, key='Key0', no='TEST', name='Test')
+    elif method == 'delete_diff':
+        if company == 'Company1':
+            response = template.render(delete='false')
+        else:
+            response = template.render(delete='true')
+    elif method == 'delete_fail':
+        response = template.render(delete='false')
     else:
-        filename = 'mocks/%s.xml' % method
-    with open(os.path.join(os.path.dirname(__file__), filename), 'r') as f:
-        response = f.read()
-        reply = Reply(response)
-        return reply
+        response = template.render()
+
+    reply = Reply(response)
+    return reply
 
 
 @pytest.fixture(autouse=True)
