@@ -206,12 +206,11 @@ class QuerySet(object):
         return self
 
     @require_client
-    def get(self, companies=None, **kwargs):
+    def get(self, **kwargs):
         self._check_kwargs(self.model._meta.get, **kwargs)
 
         self.queryset = []
-        if not companies:
-            companies = self.model.client.companies
+        companies = self.model.client.companies
         for company in companies:
             client = self._connect(company)
             # When the result is None the suds raise AttributeError, handle
@@ -264,17 +263,19 @@ class QuerySet(object):
             if self.queryset:
                 for inst in self.queryset:
                     # Finally we will have:
-                    # companies: contains new companies and will create
+                    # add_companies: contains new companies and will create
                     # update_companies: contains existing companies and will update
                     # delete_companies: contains deleted companies and will delete
+                    add_companies = []
                     existing_companies = inst.get_companies()
                     delete_companies = []
                     if companies:
+                        add_companies = companies[:]
                         update_companies = []
                         for company in existing_companies:
-                            if company in companies:
+                            if company in add_companies:
                                 update_companies.append(company)
-                                companies.pop(companies.index(company))
+                                add_companies.pop(add_companies.index(company))
                             else:
                                 delete_companies.append(company)
                     else:
@@ -301,8 +302,8 @@ class QuerySet(object):
                             self.delete(**tmp_dict)
                             inst.remove_key(key)
                     # Now create the new entries
-                    if companies:
-                        inst.add_companies(companies)
+                    if add_companies:
+                        inst.add_companies(add_companies)
                         inst.save()
             else:
                 for key in obj.get_key_objects():
@@ -440,7 +441,7 @@ class QuerySet(object):
             self.model._meta.add_declared_fields_from_names(defaults.keys())
 
         try:
-            inst = self.get(companies, **kwargs)
+            inst = self.get(**kwargs)
             created = False
         except ObjectDoesNotExist:
             # Update the defaults with the kwargs which contains the query
@@ -473,7 +474,7 @@ class QuerySet(object):
             self.model._meta.add_declared_fields_from_names(defaults.keys())
 
         try:
-            inst = self.get(companies, **kwargs)
+            inst = self.get(**kwargs)
             self.update(inst, companies, **defaults)
             created = False
         except ObjectDoesNotExist:
