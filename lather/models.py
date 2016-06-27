@@ -874,7 +874,7 @@ class Model(object):
                 index = count
                 break
 
-        if index:
+        if index is not None:
             getattr(self, self._meta.default_id).pop(index)
 
     def add_key(self, company, client, key):

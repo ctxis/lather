@@ -134,6 +134,13 @@ class TestBaseModel:
 
 
 class TestModel:
+    # TODO: Test eq after save and adding values to discovered fields
+
+    @pytest.fixture(autouse=True)
+    def reset_models(self):
+        test_models.TestModel1._meta.discovered_fields = []
+        test_models.TestModel2._meta.discovered_fields = []
+        test_models.TestModel3._meta.discovered_fields = []
 
     @pytest.fixture(autouse=True)
     def nmspc(self):
@@ -143,8 +150,16 @@ class TestModel:
         )
         self.keylist = ['var1', 'var2']
 
+    @pytest.fixture
+    def client(self):
+        latherclient = client.LatherClient('test', cache=None)
+        latherclient.register(test_models.TestModel1)
+        latherclient.register(test_models.TestModel2)
+        latherclient.register(test_models.TestModel3)
+
     def test_init(self):
         inst = test_models.TestModel1(var1='Test')
+
         assert inst.var1 == 'Test'
         for field in inst._meta.declared_fields:
             if field.name != 'var1':
@@ -228,11 +243,57 @@ class TestModel:
                 assert field._blank is True
         assert len(inst._meta.discovered_fields) == 0
 
+    def test_add_key_1(self):
+        inst = test_models.TestModel1('Args1', 'Args2')
+        inst.add_key('Company1', 'client', 'key')
+
+        assert len(inst.Key) == 1
+        assert inst.Key[0].company == 'Company1'
+        assert inst.Key[0].client == 'client'
+        assert inst.Key[0].key == 'key'
+
+    def test_remove_key_1(self):
+        inst = test_models.TestModel1('Args1', 'Args2')
+        inst.add_key('Company1', 'client', 'key')
+        inst.remove_key('key')
+
+        assert len(inst.Key) == 0
+
+    def test_get_keys_1(self):
+        inst = test_models.TestModel1('Args1', 'Args2')
+        inst.add_key('Company1', 'client', 'key')
+
+        assert inst.get_keys() == ['key']
+
     def test_eq_1(self):
-        inst1 = test_models.TestModel1('Args1', 'Args2')
-        inst2 = test_models.TestModel1('Args1', 'Args2')
+        inst1 = test_models.TestModel1('Args1')
+        inst2 = test_models.TestModel1('Args1')
 
         assert inst1 == inst2
+
+    def test_eq_2(self):
+        inst1 = test_models.TestModel1('Args1')
+        inst2 = test_models.TestModel1('Args2')
+
+        assert inst1 != inst2
+
+    def test_eq_3(self):
+        inst1 = test_models.TestModel3(var_test_1='Kwargs1')
+        inst2 = test_models.TestModel3(var_test_1='Kwargs1')
+
+        assert inst1 == inst2
+
+    def test_eq_4(self):
+        inst1 = test_models.TestModel3(var_test_1='Kwargs1')
+        inst2 = test_models.TestModel3(var_test_1='Kwargs2')
+
+        assert inst1 != inst2
+
+    def test_eq_5(self):
+        inst1 = test_models.TestModel3(var_test_1='Kwargs1')
+        inst2 = test_models.TestModel3(var_test_2='Kwargs1')
+
+        assert inst1 != inst2
 
     def test_get_companies(self):
         companies = ['Company1', 'Company2']
@@ -240,6 +301,15 @@ class TestModel:
         inst.add_companies(companies)
 
         assert inst.get_companies() == companies
+
+    def test_save_1(self, client):
+        inst = test_models.TestModel1('Args1', 'Args2')
+        inst.save()
+
+        assert len(inst.Key) == 0
+        assert inst._meta.get_field_names() == ['var1', 'var2']
+        assert inst._meta.get_declared_field_names() == ['var1', 'var2']
+        assert inst._meta.get_discovered_field_names() == []
 
 
 @pytest.mark.usefixtures("mock")
@@ -518,7 +588,6 @@ class TestQueryset:
         queryset.create(No='Test', Name='Test')
         with pytest.raises(Exception):
             queryset.count()
-
 
 
 class TestField:
