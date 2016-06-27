@@ -256,7 +256,7 @@ class QuerySet(object):
             raise ObjectDoesNotExist('Object not found')
 
     @require_client
-    def update(self, obj=None, companies=None, **kwargs):
+    def update(self, obj=None, companies=None, delete=False, **kwargs):
         if obj:
             # This if will be true when the previous funciton is the
             # update_or_create
@@ -298,9 +298,10 @@ class QuerySet(object):
                                          getattr(response,
                                                  self.model._meta.default_id))
                         elif key.company in delete_companies:
-                            tmp_dict = {self.model._meta.default_id: str(key.key)}
-                            self.delete(**tmp_dict)
-                            inst.remove_key(key)
+                            if delete:
+                                tmp_dict = {self.model._meta.default_id: str(key.key)}
+                                self.delete(**tmp_dict)
+                                inst.remove_key(key)
                     # Now create the new entries
                     if add_companies:
                         inst.add_companies(add_companies)
