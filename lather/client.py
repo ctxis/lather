@@ -97,6 +97,7 @@ class LatherClient(object):
         self.models = []
         self.options = kwargs
         self.service = service
+        self.invalid_companies = kwargs.pop('invalid_companies', [])
         # Initialize companies with a list containing a None object. This is
         # usefull because we dont have to rewrite the QuerySet class. It will
         # iterate over the companies and essentially will make an endpoint
@@ -175,7 +176,7 @@ class LatherClient(object):
             raise Exception('You can only call this function only if the '
                             'system is NAV')
         client = self.connect(self.main)
-        self.companies = client.Companies()
+        self.companies = list(set(client.Companies()) - set(self.invalid_companies))
 
     def register(self, model):
         """
