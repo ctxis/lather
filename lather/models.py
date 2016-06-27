@@ -802,8 +802,6 @@ class Model(object):
         fields and the current one doesn't contain these field causing the
         __eq__ to fail because of AttributeError)
         """
-        log.debug('[%s] Calling model __getattr__: %s' % (log.name.upper(),
-                                                          item))
         if item in self._meta.get_discovered_field_names():
             return None
         else:
