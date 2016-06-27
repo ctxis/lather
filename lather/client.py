@@ -2,6 +2,7 @@
 import logging
 import urlparse
 import urllib
+import urllib2
 
 from suds.client import Client
 from suds.transport.https import HttpAuthenticated
@@ -31,7 +32,7 @@ class WrapperSudsClient(object):
                       'this error: %s' % (log.name.upper(), endpoint, e))
             raise InvalidBaseUrlException('%s, %s' % (e, 'Maybe the base url '
                                                          'is invalid.'))
-        except TransportError, e:
+        except (TransportError, urllib2.URLError), e:
             log.error('[%s] Failed to make the connection to %s due to '
                       'this error: %s' % (log.name.upper(), endpoint, e))
             raise ConnectionError('Connection error: %s' % e)
