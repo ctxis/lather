@@ -4,7 +4,7 @@ from lather import exceptions
 
 class Response(object):
     """
-    Simple class which represent the suds response
+    Simple class which represents the suds response
     """
     def __init__(self, keylist, dict):
         self.__keylist__ = keylist

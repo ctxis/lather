@@ -12,7 +12,7 @@ Application which provides an `django` like interface to interact with SOAP APIs
 ## Setup
 * `pip install https://github.com/ctxis/lather/archive/master.zip`
 
-and then add you can use this library like this:
+and then you can use this library like this:
 
 ```python
 ## models.py
@@ -34,5 +34,5 @@ client = client.LatherClient()
 client.register(models.Customer)
 ```
 
-## Support
+## Specifically supported SOAP APIs
 * Microsoft Dynamics NAV Web Services
