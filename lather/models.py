@@ -805,7 +805,7 @@ class Model(object):
         if item in self._meta.get_discovered_field_names():
             return None
         else:
-            AttributeError(item)
+            raise AttributeError(item)
 
     def __eq__(self, other):
         """
