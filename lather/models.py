@@ -9,8 +9,8 @@ log = logging.getLogger('lather_client')
 
 class Field(object):
     """
-    Suds library de-serialize the attributes, there is no need for
-    de-serialization. Suds library also cares about the serialization. So in
+    Suds library de-serializes the attributes, there is no need for
+    de-serialization. Suds library also does the serialization. So in
     this class we only define the validators
     """
 
@@ -115,7 +115,7 @@ class QuerySet(object):
         Central method which executes the api calls
         """
         if not method:
-            raise TypeError('Method must be string not None.')
+            raise TypeError('Method must be a string not None.')
         if kwargs.get('attrs', None):
             return getattr(client, method)(kwargs.get('attrs'))
         return getattr(client, method)(**kwargs)
@@ -123,11 +123,11 @@ class QuerySet(object):
     def _check_kwargs(self, method, **kwargs):
         params = self.model.client.get_service_params(method,
                                                       self.model._meta.page)
-        # Because, elements are suds.sax.text.Text, convert them to str
+        # Because elements are suds.sax.text.Text, convert them to str
         params = [str(x[0]) for x in params]
         if params:
             if len(kwargs.keys()) > len(params):
-                raise AttributeError('You specify too many arguments.')
+                raise AttributeError('You have specified too many arguments.')
             for k in params:
                 if k not in kwargs.keys():
                     raise AttributeError('You have to specify the arg: %s' % k)
@@ -258,7 +258,7 @@ class QuerySet(object):
     @require_client
     def update(self, obj=None, companies=None, delete=False, **kwargs):
         if obj:
-            # This if will be true when the previous funciton is the
+            # This if will be true when the previous function is the
             # update_or_create
             if self.queryset:
                 for inst in self.queryset:
@@ -374,8 +374,8 @@ class QuerySet(object):
                     success = False
         else:
             # Send the delete action to all the companies
-            # TODO: Maybe run first a get or filter to get the object
-            # TODO: because the same Key may not be unique
+            # TODO: Maybe first run a get or filter to get the object
+            # TODO: because a Key may not be unique
             keys = kwargs.get(self.model._meta.default_id, None)
             if self.queryset and not keys:
                 tmp_list = self.queryset[:]
@@ -419,7 +419,7 @@ class QuerySet(object):
                     for company in companies:
                         client = self._connect(company)
                         # TODO: catch more accurate the error: Webfault
-                        # because whenever tries to delete somthing which
+                        # because whenever tries to delete something which
                         # doesn't exist raise this error
                         try:
                             if not self._query(client, self.model._meta.delete,
@@ -435,7 +435,7 @@ class QuerySet(object):
         created = False
         defaults = kwargs.pop('defaults', None)
         # Sometimes, the returning object doesn't contain all the attributes
-        # from the defaults so if you specify a new value to an atttibute
+        # from the defaults so if you specify a new value to an attribute
         # contained in the defaults but not in the returned object, it will not
         # saved, so we are going to add this attributes to the declared_fields
         if not self.model._meta.declared_fields:
@@ -772,7 +772,7 @@ class Model(object):
             # the declared_fields_names
             if not self._meta.declared_fields:
                 raise TypeError(
-                    'You cannot pass args without specifing custom fields.')
+                    'You cannot pass args without specifying custom fields.')
             else:
                 if len(args) > len(self._meta.get_declared_field_names()):
                     raise TypeError('Too many arguments. You can set '
@@ -952,13 +952,13 @@ class Model(object):
         """
         self.clean()
         # Create dict with all the fields (declared and discovered)
-        # TODO: add reaonly fields to ignore at this point because some of them
+        # TODO: add readonly fields to ignore at this point because some of them
         # maybe cannot handle it from the backend
         tmp_dict = dict((field, getattr(self, field)) for field in
                         self._meta.get_field_names() if
                         field not in self._meta.readonly_fields)
 
-        # If there wans't any change at the companies just update, otherwise
+        # If there wasn't any change at the companies just update, otherwise
         # run create which handles these new companies
         if len(self.get_keys()) == len(self.get_companies()):
             self.objects.update(obj=self, **tmp_dict)
