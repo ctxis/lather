@@ -99,12 +99,13 @@ class LatherClient(object):
         self.options = kwargs
         self.service = service
         self.invalid_companies = kwargs.pop('invalid_companies', [])
+        self.active = kwargs.pop('active', True)
         # Initialize companies with a list containing a None object. This is
         # useful because we don't have to rewrite the QuerySet class. It will
         # iterate over the companies and essentially will make an endpoint
         # without company. Useful for the Generic services
         self.companies = [None]
-        if self.service == ServiceEnums.NAV:
+        if self.service == ServiceEnums.NAV and self.active:
             self.companies = []
             try:
                 self.update_companies()
