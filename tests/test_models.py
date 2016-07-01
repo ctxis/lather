@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import pytest
-from lather import models, exceptions, client
+from lather import models, exceptions, client, managers
 
 from tests import models as test_models
 from tests import utils
@@ -15,7 +15,7 @@ class TestBaseModel:
         )
 
     def test_new(self):
-        new_class = type('TestModel', (models.Model, ), self.base_dict)
+        new_class = type('TestModel', (models.NavModel, ), self.base_dict)
 
         assert hasattr(new_class, '_meta')
         assert isinstance(new_class._meta, models.Options)
@@ -25,14 +25,18 @@ class TestBaseModel:
 
     def test_mew_with_meta_class(self):
         class Meta:
-            get = 'Test'
+            endpoints = (
+                ('get', {
+                    'method': 'Test'
+                }),
+            )
             page = 'Test'
         nmspc = self.base_dict
         nmspc.update(Meta=Meta)
-        new_class = type('TestModel', (models.Model, ), nmspc)
+        new_class = type('TestModel', (models.NavModel, ), nmspc)
 
         assert hasattr(new_class, '_meta')
-        assert new_class._meta.get == Meta.get
+        assert new_class._meta.get == Meta.endpoints[0][1]['method']
         assert new_class._meta.page == Meta.page
 
     def test_new_raise_duplicate_key_error(self):
@@ -40,12 +44,12 @@ class TestBaseModel:
         nmspc.update(Key=models.Field(max_length=10))
 
         with pytest.raises(exceptions.FieldException):
-            type('TestModel', (models.Model, ), nmspc)
+            type('TestModel', (models.NavModel, ), nmspc)
 
     def test_new_with_fields(self):
         nmspc = self.base_dict
         nmspc.update(var1=models.Field(max_length=10))
-        new_class = type('TestModel', (models.Model, ), nmspc)
+        new_class = type('TestModel', (models.NavModel, ), nmspc)
 
         assert hasattr(new_class, '_meta')
         assert len(new_class._meta.declared_fields) == 1
@@ -56,7 +60,7 @@ class TestBaseModel:
             fields = 'all'
         nmspc = self.base_dict
         nmspc.update(Meta=Meta)
-        new_class = type('TestModel', (models.Model, ), nmspc)
+        new_class = type('TestModel', (models.NavModel, ), nmspc)
         assert len(new_class._meta.declared_fields) == 0
         assert len(new_class._meta.discovered_fields) == 0
 
@@ -68,7 +72,7 @@ class TestBaseModel:
         nmspc.update(var2=models.Field())
 
         with pytest.raises(exceptions.FieldException):
-            type('TestModel', (models.Model, ), nmspc)
+            type('TestModel', (models.NavModel, ), nmspc)
 
     def test_new_inheritance_with_no_extra_fields(self):
         new_class = type('TestModel', (test_models.TestModel1, ),
@@ -91,7 +95,7 @@ class TestBaseModel:
             new_class = type('TestModel', (test_models.TestModel1,), nmspc)
 
     def test_new_inheritance_with_two_parents(self):
-        new_parent = type('TestParent', (models.Model, ),
+        new_parent = type('TestParent', (models.NavModel, ),
                           self.base_dict.copy())
         new_class = type('TestModel', (new_parent, test_models.TestModel1),
                          self.base_dict.copy())
@@ -101,7 +105,7 @@ class TestBaseModel:
     def test_new_inheritance_with_conflicts_at_the_parents(self):
         nmspc = self.base_dict.copy()
         nmspc.update(var1=models.Field(max_length=10))
-        new_parent = type('TestParent', (models.Model, ), nmspc)
+        new_parent = type('TestParent', (models.NavModel, ), nmspc)
         with pytest.raises(exceptions.FieldException):
             new_class = type('TestModel', (new_parent, test_models.TestModel1),
                              self.base_dict.copy())
@@ -109,31 +113,39 @@ class TestBaseModel:
     def test_new_inheritance_from_non_model_class(self):
         #TODO: Test for #248 models.py doesn't work
         new_parent = type('TestParent', (object, ), {})
-        new_class = type('TestModel', (new_parent, models.Model),
+        new_class = type('TestModel', (new_parent, models.NavModel),
                          self.base_dict)
 
         assert new_class
 
     def test_new_inheritance_with_new_meta_attributes_1(self):
         class Meta:
-            get = 'Test'
+            endpoints = (
+                ('get', {
+                    'method': 'Test'
+                }),
+            )
         nmspc = self.base_dict
         nmspc.update(Meta=Meta)
         new_class = type('TestModel', (test_models.TestModel1, ), nmspc)
 
-        assert new_class._meta.get == Meta.get
+        assert new_class._meta.get == Meta.endpoints[0][1]['method']
 
     def test_new_inheritance_with_new_meta_attributes_2(self):
         class Meta:
-            get = 'Test'
+            endpoints = (
+                ('get', {
+                    'method': 'Test'
+                }),
+            )
         nmspc = self.base_dict
         nmspc.update(Meta=Meta)
         new_class = type('TestModel', (test_models.TestModel2, ), nmspc)
 
-        assert new_class._meta.get == Meta.get
+        assert new_class._meta.get == Meta.endpoints[0][1]['method']
 
 
-class TestModel:
+class TestNavModel:
     # TODO: Test eq after save and adding values to discovered fields
 
     @pytest.fixture(autouse=True)
@@ -152,7 +164,7 @@ class TestModel:
 
     @pytest.fixture
     def client(self):
-        latherclient = client.LatherClient('test', cache=None)
+        latherclient = client.NavLatherClient('test', cache=None)
         latherclient.register(test_models.TestModel1)
         latherclient.register(test_models.TestModel2)
         latherclient.register(test_models.TestModel3)
@@ -231,7 +243,7 @@ class TestModel:
         keylist.pop(keylist.index('var2'))
 
         response = utils.Response(keylist=keylist, dict=data)
-        new_class = type('TestModel', (test_models.TestModel1, models.Model, ),
+        new_class = type('TestModel', (test_models.TestModel1, models.NavModel, ),
                          {'__module__': '__main__'})
         inst = new_class()
         inst.populate_attrs(response)
@@ -245,25 +257,25 @@ class TestModel:
 
     def test_add_key_1(self):
         inst = test_models.TestModel1('Args1', 'Args2')
-        inst.add_key('Company1', 'client', 'key')
+        inst.add_id('Company1', 'client', 'key')
 
         assert len(inst.Key) == 1
         assert inst.Key[0].company == 'Company1'
         assert inst.Key[0].client == 'client'
-        assert inst.Key[0].key == 'key'
+        assert inst.Key[0].id == 'key'
 
     def test_remove_key_1(self):
         inst = test_models.TestModel1('Args1', 'Args2')
-        inst.add_key('Company1', 'client', 'key')
-        inst.remove_key('key')
+        inst.add_id('Company1', 'client', 'key')
+        inst.remove_id('key')
 
         assert len(inst.Key) == 0
 
     def test_get_keys_1(self):
         inst = test_models.TestModel1('Args1', 'Args2')
-        inst.add_key('Company1', 'client', 'key')
+        inst.add_id('Company1', 'client', 'key')
 
-        assert inst.get_keys() == ['key']
+        assert inst.get_id() == ['key']
 
     def test_eq_1(self):
         inst1 = test_models.TestModel1('Args1')
@@ -313,7 +325,7 @@ class TestModel:
 
 
 @pytest.mark.usefixtures("mock")
-class TestQueryset:
+class TestNavQueryset:
 
     @pytest.fixture
     def customer_model(self):
@@ -325,13 +337,13 @@ class TestQueryset:
             'Meta': Meta
         }
 
-        return type('Customer', (models.Model, ), nmspc)
+        return type('Customer', (models.NavModel, ), nmspc)
 
     @pytest.fixture
     def queryset(self, customer_model):
-        latherclient = client.LatherClient('test', cache=None)
+        latherclient = client.NavLatherClient('test', cache=None)
         latherclient.register(customer_model)
-        return models.QuerySet(customer_model.objects, customer_model)
+        return models.NavQuerySet(customer_model.objects, customer_model)
 
 ## Test get
 
@@ -341,8 +353,8 @@ class TestQueryset:
         assert isinstance(customer.Key, list)
         assert len(customer.Key) == 4
         for key in customer.Key:
-            assert isinstance(key, models.Key)
-        assert customer.Key[0].key == 'Key'
+            assert isinstance(key, managers.Instance)
+        assert customer.Key[0].id == 'Key'
         assert customer._meta.declared_fields == []
         assert len(customer._meta.discovered_fields) == 2
 
@@ -356,7 +368,7 @@ class TestQueryset:
         customer = queryset.get(No='Test')
         customers = [c for c in customer]
 
-        assert isinstance(customer, models.QuerySet)
+        assert isinstance(customer, models.NavQuerySet)
         assert len(customer.queryset) == 2
         assert len(customers[0].Key) == 3
         assert customers[1].Name == 'Test_Diff'
@@ -369,22 +381,24 @@ class TestQueryset:
         customers = [c for c in customer]
 
         assert len(customers[0].Key) == 3
-        assert customers[0].Key[0].key == 'Key0'
-        assert customers[0].Key[2].key == 'Key1'
+        assert customers[0].Key[0].id == 'Key0'
+        assert customers[0].Key[2].id == 'Key1'
 
+    '''@pytest.mark.skip(reason="removed method")
     def test_get_raise_error_providing_false_kwargs(self, queryset):
         with pytest.raises(AttributeError):
             customer = queryset.get(Test='Test')
 
+    @pytest.mark.skip(reason="removed method")
     def test_get_raise_error_providing_wrong_number_of_kwargs(self, queryset):
         with pytest.raises(AttributeError):
-            customer = queryset.get(No='Test', Name='Test')
+            customer = queryset.get(No='Test', Name='Test')'''
 
     def test_get_raise_error_without_lather_client(self):
         # Use the TestModel3 because the Customer model
         # contain already a client so we will not see the raise
-        manager = models.Manager(test_models.TestModel3)
-        queryset = models.QuerySet(manager, test_models.TestModel3)
+        manager = models.NavManager(test_models.TestModel3)
+        queryset = models.NavQuerySet(manager, test_models.TestModel3)
         with pytest.raises(Exception):
             customer = queryset.get(No='Test')
         with pytest.raises(Exception):
@@ -468,17 +482,17 @@ class TestQueryset:
         customer = queryset.create(No='Test', Name='Test')
 
         assert len(customer.Key) == 4
-        assert customer.Key[0].key == 'Key'
+        assert customer.Key[0].id == 'Key'
 
     def test_create_providing(self, queryset, customer_model):
         customer_obj = customer_model(No='Test', Name='Test')
         customer_obj.add_companies(['Company1', 'Company2'])
 
         assert len(customer_obj.Key) == 2
-        assert customer_obj.Key[0].key is None
+        assert customer_obj.Key[0].id is None
         queryset.create(obj=customer_obj)
         assert len(customer_obj.Key) == 2
-        assert customer_obj.Key[0].key == 'Key'
+        assert customer_obj.Key[0].id == 'Key'
 
 ## Test update
 
@@ -501,7 +515,7 @@ class TestQueryset:
         new_customer = queryset.update(Key=customer.Key)
         assert len(new_customer.Key) == 4
         assert new_customer.Name == name
-        assert new_customer.Key[0].key == 'Key'
+        assert new_customer.Key[0].id == 'Key'
 
     def test_update_providing_object(self, queryset, customer_model):
         name = 'Test for example'
@@ -509,11 +523,11 @@ class TestQueryset:
         customer_obj.add_companies(['Company1', 'Company2'])
 
         assert len(customer_obj.Key) == 2
-        assert customer_obj.Key[0].key is None
+        assert customer_obj.Key[0].id is None
         assert customer_obj.Name == 'Test'
         queryset.update(obj=customer_obj, Name=name)
         assert len(customer_obj.Key) == 2
-        assert customer_obj.Key[0].key == 'Key'
+        assert customer_obj.Key[0].id == 'Key'
         assert customer_obj.Name == name
 
 ## Test get_or_create
@@ -552,7 +566,7 @@ class TestQueryset:
     def test_filter(self, queryset):
         response = queryset.filter(No='Test*')
 
-        assert isinstance(response, models.QuerySet)
+        assert isinstance(response, models.NavQuerySet)
         assert response.queryset[0].Name == 'Test'
         assert response.queryset[1].Name == 'Test for example'
         assert response.queryset[2].Name == 'Test3 for example'
@@ -570,7 +584,7 @@ class TestQueryset:
         response = queryset.filter(No='Test*')
 
         for result in response:
-            assert isinstance(result, models.Model)
+            assert isinstance(result, models.NavModel)
 
     def test_iter_without_queryset(self, queryset):
         queryset.create(No='Test', Name='Test')

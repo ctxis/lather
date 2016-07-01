@@ -5,17 +5,14 @@ sys.path.append('../lather')
 
 from lather import models, client, enums
 
-import logging
 logging.basicConfig()
 logging.getLogger('lather_client').setLevel(logging.DEBUG)
 
 
-class Customer(models.Model):
+class Customer(models.NavModel):
 
     class Meta:
         fields = 'all'
-        get = 'Read'
-        delete = 'Delete'
 
 # Define the base url, the username and the password
 base_url = 'http://server/'
@@ -23,10 +20,11 @@ username = None
 password = None
 
 # Create basic client
-#latherclient = LatherClient(base_url, username, password, enums.AuthEnums.BASIC)
+#latherclient = LatherClient(base_url, username, password,
+#                            auth=enums.AuthEnums.BASIC)
 
 # Create ntlm client
-latherclient = client.LatherClient(base_url, username, password, cache=False)
+latherclient = client.NavLatherClient(base_url, username, password, cache=None)
 
 # Register the models with the appropriate client
 latherclient.register(Customer)

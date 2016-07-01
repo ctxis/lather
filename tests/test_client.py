@@ -9,21 +9,21 @@ from .models import *
 
 
 @pytest.mark.usefixtures("mock")
-class TestLatherClient:
+class TestNavLatherClient:
 
     @pytest.fixture
     def latherclient(self):
-        return client.LatherClient('test', cache=None)
+        return client.NavLatherClient('test', cache=None)
 
     def test_make_options_ntlm(self):
-        latherclient = client.LatherClient('test', 'test', 'test')
+        latherclient = client.NavLatherClient('test', 'test', 'test')
         options = latherclient._make_options()
 
         assert options['transport']
         assert isinstance(options['transport'], https.NTLMSSPAuthenticated)
 
     def test_make_options_basic(self):
-        latherclient = client.LatherClient('test', 'test', 'test',
+        latherclient = client.NavLatherClient('test', 'test', 'test',
                                            enums.AuthEnums.BASIC)
         options = latherclient._make_options()
 
@@ -35,7 +35,7 @@ class TestLatherClient:
             http="http://test.local:3128",
             https="https://test.local:3128"
         )
-        latherclient = client.LatherClient('test', proxy=proxy)
+        latherclient = client.NavLatherClient('test', proxy=proxy)
         options = latherclient._make_options()
 
         assert options['proxy'] == proxy

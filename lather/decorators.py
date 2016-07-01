@@ -3,7 +3,9 @@
 
 def require_client(func):
     def wrapper(*args, **kwargs):
-        if args[0].__class__.__name__ == 'QuerySet':
+        if args[0].__class__.__name__ == 'BaseQuerySet' or \
+                        args[0].__class__.__name__ == 'NavQuerySet' or \
+                        args[0].__class__.__name__ == 'QuerySet':
             if args[0].model.client:
                 return func(*args, **kwargs)
             else:
