@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from django.conf import settings
-from lather.client import LatherClient
+from lather.client import NavLatherClient
 
 
 active = getattr(settings, 'LATHER_ENABLE', None)
@@ -17,4 +17,7 @@ if options and active is None:
 if active is not None and not options:
     options = {'base': None, 'active': active}
 
-lather_client = LatherClient(**options)
+if active == False:
+    options = {'base': None, 'active': active}
+
+lather_client = NavLatherClient(**options)

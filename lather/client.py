@@ -9,10 +9,11 @@ from suds.transport.https import HttpAuthenticated
 from suds.plugin import DocumentPlugin
 from suds.transport import TransportError
 
-from .enums import AuthEnums, ServiceEnums
+from .enums import AuthEnums
 from .https import NTLMSSPAuthenticated
-from .decorators import *
-from .exceptions import *
+from .decorators import require_client
+from .exceptions import ConnectionError
+from .exceptions import InvalidBaseUrlException
 
 log = logging.getLogger('lather_client')
 
@@ -28,7 +29,7 @@ class WrapperSudsClient(object):
         try:
             self.client = Client(endpoint, **kwargs)
         except ValueError, e:
-            log.error('[%] Failed to make the connection to %s due to '
+            log.error('[%s] Failed to make the connection to %s due to '
                       'this error: %s' % (log.name.upper(), endpoint, e))
             raise InvalidBaseUrlException('%s, %s' % (e, 'Maybe the base url '
                                                          'is invalid.'))
@@ -39,7 +40,7 @@ class WrapperSudsClient(object):
 
     def __getattr__(self, item):
         """
-        Handle suds service calls
+        Handles suds service calls
         """
         log.debug('[%s] Calling wrapper __getattr__: %s' % (log.name.upper(),
                                                             item))
@@ -58,7 +59,7 @@ class WrapperSudsClient(object):
         """
         Returns the structure of the suds model
         """
-        log.debug('[%s] Create factory for %s' %(log.name.upper(), name))
+        log.debug('[%s] Create factory for %s' % (log.name.upper(), name))
         return self.client.factory.create(name)
 
     @require_client
@@ -86,31 +87,17 @@ class WrapperSudsClient(object):
 
 
 class LatherClient(object):
-    def __init__(self, base, username=None, password=None, auth=AuthEnums.NTLM,
-                 proxy=None, service=ServiceEnums.NAV, main='SystemService',
-                 **kwargs):
+    def __init__(self, base, username=None, password=None, auth=None,
+                 proxy=None, **kwargs):
         self.base = base
         self.username = username
         self.password = password
         self.auth = auth
         self.proxy = proxy
-        self.main = main
         self.models = []
         self.options = kwargs
-        self.service = service
-        self.invalid_companies = kwargs.pop('invalid_companies', [])
-        self.active = kwargs.pop('active', True)
-        # Initialize companies with a list containing a None object. This is
-        # useful because we don't have to rewrite the QuerySet class. It will
-        # iterate over the companies and essentially will make an endpoint
-        # without company. Useful for the Generic services
-        self.companies = [None]
-        if self.service == ServiceEnums.NAV and self.active:
-            self.companies = []
-            try:
-                self.update_companies()
-            except:
-                pass
+        if self.username and self.password and not self.auth:
+            self.auth = AuthEnums.NTLM
 
     def _create_ntlm_auth(self):
         """
@@ -147,42 +134,24 @@ class LatherClient(object):
 
         return options
 
-    def _make_endpoint(self, page, company):
+    def make_endpoint(self, page, **kwargs):
         """
         Creates the endpoint
         """
-        if company:
-            url = '%s/%s' % (urllib.quote(company), page)
-        elif self.companies and self.companies[0]:
-            url = '%s/%s' % (urllib.quote(self.companies[0]), page)
-        else:
-            url = page
+        return urlparse.urljoin(self.base, page)
 
-        return urlparse.urljoin(self.base, url)
-
-    def connect(self, page, company=None):
+    def connect(self, page, *args, **kwargs):
         """
         Creates the connection to the endpoint
         """
-        endpoint = self._make_endpoint(page, company)
+        endpoint = self.make_endpoint(page, *args, **kwargs)
         options = self._make_options()
 
         return WrapperSudsClient(endpoint, **options)
 
-    def update_companies(self):
-        """
-        Make an initial request to the system service endpoint to get all
-        the companies
-        """
-        if self.service != ServiceEnums.NAV:
-            raise Exception('You can only call this function if the '
-                            'system is MS NAV')
-        client = self.connect(self.main)
-        self.companies = list(set(client.Companies()) - set(self.invalid_companies))
-
     def register(self, model):
         """
-        Register model to this client and pass the client to the model
+        Registers a model to this client and passes the client to the model
         """
         self.models.append(model)
         model.client = self
@@ -203,6 +172,43 @@ class LatherClient(object):
             pass
 
         return params
+
+
+class NavLatherClient(LatherClient):
+    def __init__(self, *args, **kwargs):
+        self.invalid_companies = kwargs.pop('invalid_companies', [])
+        self.active = kwargs.pop('active', True)
+        self.main = kwargs.pop('main', 'SystemService')
+        super(NavLatherClient, self).__init__(*args, **kwargs)
+        self.companies = [None]
+        if self.active:
+            self.companies = []
+            try:
+                self.update_companies()
+            except:
+                pass
+
+    def make_endpoint(self, page, company=None):
+        """
+        Creates the endpoint
+        """
+        if company:
+            url = '%s/%s' % (urllib.quote(company), page)
+        elif self.companies and self.companies[0]:
+            url = '%s/%s' % (urllib.quote(self.companies[0]), page)
+        else:
+            url = page
+
+        return urlparse.urljoin(self.base, url)
+
+    def update_companies(self):
+        """
+        Make an initial request to the system service endpoint to get all
+        the companies
+        """
+        client = self.connect(self.main)
+        self.companies = list(
+            set(client.Companies()) - set(self.invalid_companies))
 
 
 class AddService(DocumentPlugin):

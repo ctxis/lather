@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
+import sys
 import logging
 
-from .exceptions import *
-from .decorators import *
+from .exceptions import ValidationError
+from .exceptions import FieldException
+from .decorators import require_client
+from .managers import Manager
+from .managers import NavManager
+from .managers import BaseQuerySet, QuerySet, NavQuerySet
+from .managers import Instance
 
 log = logging.getLogger('lather_client')
 
@@ -63,556 +69,71 @@ class Field(object):
         return value
 
 
-class QuerySet(object):
-    def __init__(self, manager, model):
-        self.manager = manager
-        self.model = model
-        self.queryset = None
-
-    def __len__(self):
-        return self.count()
-
-    def __iter__(self):
-        if not self.queryset:
-            raise Exception('No queryset found')
-
-        return iter(self.queryset)
-
-    def __getattr__(self, item):
-        log.debug('[%s] Calling queryset __getattr__: %s' % (log.name.upper(),
-                                                             item))
-        for codeunit in self.model._meta.codeunit_pages:
-            client = self._connect(codeunit)
-            services = dict((service.lower(), service) for service in
-                            client.get_services())
-            if item in services.keys():
-                def wrapper(*args, **kwargs):
-                    log.debug('[%s] called with %r and %r' % (log.name.upper(),
-                                                              args, kwargs))
-                    companies = self.model.client.companies
-                    for company in companies:
-                        # TODO: Create dynamically a new class from Model
-                        # with the same name as the codeunit and save the
-                        # results
-                        new_client = self._connect(codeunit, company)
-                        func = getattr(new_client, services[service])
-                        return func(*args, **kwargs)
-
-                return wrapper
-        raise AttributeError(item)
-
-    def _connect(self, company=None, page=None):
-        """
-        Central method which makes the connection to the api
-        """
-        if not page:
-            page = self.model._meta.page
-
-        return self.model.client.connect(page, company)
-
-    def _query(self, client, method, **kwargs):
-        """
-        Central method which executes the api calls
-        """
-        if not method:
-            raise TypeError('Method must be a string not None.')
-        if kwargs.get('attrs', None):
-            return getattr(client, method)(kwargs.get('attrs'))
-        return getattr(client, method)(**kwargs)
-
-    def _check_kwargs(self, method, **kwargs):
-        params = self.model.client.get_service_params(method,
-                                                      self.model._meta.page)
-        # Because elements are suds.sax.text.Text, convert them to str
-        params = [str(x[0]) for x in params]
-        if params:
-            if len(kwargs.keys()) > len(params):
-                raise AttributeError('You have specified too many arguments.')
-            for k in params:
-                if k not in kwargs.keys():
-                    raise AttributeError('You have to specify the arg: %s' % k)
-
-    @require_client
-    def create(self, obj=None, companies=None, **kwargs):
-        if obj:
-            # Send the create action to the appropriate companies
-            for key in obj.get_key_objects():
-                # If the key object contains the key attribute then came from
-                # the update_or_create() -> update() -> create() because the
-                # user added some new companies, so the instance contains
-                # some key objects with key
-                if key.key:
-                    continue
-                client = key.client
-                if not client:
-                    client = self._connect(key.company)
-
-                attrs = dict(attrs=kwargs)
-                response = self._query(client, self.model._meta.create,
-                                       **attrs)
-                obj.populate_attrs(response)
-                obj.add_key(key.company, client,
-                            getattr(response, self.model._meta.default_id))
-        else:
-            inst = None
-            if not companies:
-                companies = self.model.client.companies
-            for company in companies:
-                client = self._connect(company)
-                attrs = dict(attrs=kwargs)
-                response = self._query(client, self.model._meta.create,
-                                       **attrs)
-                if not inst:
-                    inst = self.model()
-                    inst.populate_attrs(response)
-                inst.add_key(company, client,
-                             getattr(response, self.model._meta.default_id))
-
-            return inst
-
-    @require_client
-    def all(self):
-        self.queryset = []
-        companies = self.model.client.companies
-        for company in companies:
-            client = self._connect(company)
-
-            response = iter(self._query(client, self.model._meta.all))
-
-            for result in response:
-                log.debug('[%s] From the company %s we got the result: %s'
-                          % (log.name.upper(), company, result))
-                inst = self.model()
-                inst.populate_attrs(result)
-                inst.add_key(company, client,
-                             getattr(result, self.model._meta.default_id))
-
-                if self.queryset:
-                    found = False
-                    for obj in self.queryset:
-                        if inst == obj:
-                            obj_keys = getattr(obj,
-                                               self.model._meta.default_id)
-                            inst_keys = getattr(inst,
-                                                self.model._meta.default_id)
-                            obj_keys.extend(inst_keys)
-                            found = True
-
-                    if not found:
-                        self.queryset.append(inst)
-                else:
-                    self.queryset.append(inst)
-
-        return self
-
-    @require_client
-    def get(self, **kwargs):
-        self._check_kwargs(self.model._meta.get, **kwargs)
-
-        self.queryset = []
-        companies = self.model.client.companies
-        for company in companies:
-            client = self._connect(company)
-            # When the result is None the suds raise AttributeError, handle
-            # this error to return ObjectNotFound
-            try:
-                # response = getattr(client, self.model._meta.get)(**kwargs)
-                response = self._query(client, self.model._meta.get, **kwargs)
-            except AttributeError:
-                continue
-
-            if isinstance(response, list):
-                raise Exception('This function can return only one object but '
-                                'the query returned multiple results. '
-                                'Use all instead')
-
-            inst = self.model()
-            inst.populate_attrs(response)
-            inst.add_key(company, client,
-                         getattr(response, self.model._meta.default_id))
-
-            if self.queryset:
-                found = False
-                for obj in self.queryset:
-                    # TODO: Test keys (if are the same at all companies ) and
-                    # TODO: give Warning about this
-                    if inst == obj:
-                        obj_keys = getattr(obj, self.model._meta.default_id)
-                        inst_keys = getattr(inst, self.model._meta.default_id)
-                        obj_keys.extend(inst_keys)
-                        found = True
-
-                if not found:
-                    self.queryset.append(inst)
-
-            else:
-                self.queryset.append(inst)
-
-        if len(self.queryset) > 1:
-            return self
-        elif len(self.queryset) == 1:
-            return self.queryset[0]
-        else:
-            raise ObjectDoesNotExist('Object not found')
-
-    @require_client
-    def update(self, obj=None, companies=None, delete=False, **kwargs):
-        if obj:
-            # This if will be true when the previous function is the
-            # update_or_create
-            if self.queryset:
-                for inst in self.queryset:
-                    # Finally we will have:
-                    # add_companies: contains new companies and will create
-                    # update_companies: contains existing companies and will update
-                    # delete_companies: contains deleted companies and will delete
-                    add_companies = []
-                    existing_companies = inst.get_companies()
-                    delete_companies = []
-                    if companies:
-                        add_companies = companies[:]
-                        update_companies = []
-                        for company in existing_companies:
-                            if company in add_companies:
-                                update_companies.append(company)
-                                add_companies.pop(add_companies.index(company))
-                            else:
-                                delete_companies.append(company)
-                    else:
-                        update_companies = existing_companies[:]
-
-                    for key in inst.get_key_objects():
-                        if key.company in update_companies:
-                            kwargs.update(
-                                {self.model._meta.default_id: key.key})
-                            client = key.client
-                            if not client:
-                                client = self._connect(key.company)
-
-                            attrs = dict(attrs=kwargs)
-                            response = self._query(client,
-                                                   self.model._meta.update,
-                                                   **attrs)
-                            inst.populate_attrs(response)
-                            inst.add_key(key.company, client,
-                                         getattr(response,
-                                                 self.model._meta.default_id))
-                        elif key.company in delete_companies:
-                            if delete:
-                                tmp_dict = {self.model._meta.default_id: str(key.key)}
-                                self.delete(**tmp_dict)
-                                inst.remove_key(key)
-                    # Now create the new entries
-                    if add_companies:
-                        inst.add_companies(add_companies)
-                        inst.save()
-            else:
-                for key in obj.get_key_objects():
-                    kwargs.update({self.model._meta.default_id: key.key})
-                    client = key.client
-                    if not client:
-                        client = self._connect(key.company)
-
-                    attrs = dict(attrs=kwargs)
-                    response = self._query(client, self.model._meta.update,
-                                           **attrs)
-                    obj.populate_attrs(response)
-                    obj.add_key(key.company, client,
-                                getattr(response, self.model._meta.default_id))
-        else:
-            inst = None
-            keys = kwargs.pop(self.model._meta.default_id, None)
-            if not keys:
-                raise TypeError("You have to provide a keyword: %s"
-                                % self.model._meta.default_id)
-
-            if isinstance(keys, list):
-                for key in keys:
-                    if not isinstance(key, Key):
-                        raise TypeError('The list must contain Key objects')
-
-                    client = key.client
-                    if not client:
-                        client = self._connect(key.company)
-                    kwargs.update({self.model._meta.default_id: key.key})
-                    response = getattr(client, self.model._meta.update)(kwargs)
-                    if not inst:
-                        inst = self.model()
-                        inst.populate_attrs(response)
-                    inst.add_key(key.company, client,
-                                 getattr(response,
-                                         self.model._meta.default_id))
-            else:
-                # TODO: Does not work for some reason, maybe needs the company
-                if not companies:
-                    companies = self.model.client.companies
-                for company in companies:
-                    client = self._connect(company)
-                    kwargs.update({self.model._meta.default_id: keys})
-                    response = getattr(client, self.model._meta.update)(kwargs)
-                    if not inst:
-                        inst = self.model()
-                        inst.populate_attrs(response)
-                    inst.add_key(company, client,
-                                 getattr(response,
-                                         self.model._meta.default_id))
-
-            return inst
-
-    @require_client
-    def delete(self, obj=None, **kwargs):
-        success = True
-        if obj:
-            # Send the delete action to the appropriate companies
-            for key in obj.get_key_objects():
-                client = key.client
-                if not client:
-                    client = self._connect(key.company)
-                tmp_dict = {self.model._meta.default_id: key.key}
-                if not self._query(client, self.model._meta.delete,
-                                   **tmp_dict):
-                    success = False
-        else:
-            # Send the delete action to all the companies
-            # TODO: Maybe first run a get or filter to get the object
-            # TODO: because a Key may not be unique
-            keys = kwargs.get(self.model._meta.default_id, None)
-            if self.queryset and not keys:
-                tmp_list = self.queryset[:]
-                for result in self.queryset:
-                    success = True
-                    for key in getattr(result, self.model._meta.default_id):
-                        if not isinstance(key, Key):
-                            raise TypeError(
-                                'The list must contain Key objects')
-                        client = key.client
-                        if not client:
-                            client = self._connect(key.company)
-                        tmp_dict = {self.model._meta.default_id: key.key}
-                        if not self._query(client, self.model._meta.delete,
-                                           **tmp_dict):
-                            success = False
-                    if success:
-                        tmp_list.pop(tmp_list.index(result))
-                # Assign the undeleted objects
-                self.queryset = tmp_list[:]
-            else:
-                if not keys:
-                    raise Exception('You have to provide a keyword: %s'
-                                    % self.model._meta.default_id)
-
-                if isinstance(keys, list):
-                    for key in keys:
-                        if not isinstance(key, Key):
-                            raise TypeError(
-                                'The list must contain Key objects')
-                        client = key.client
-                        if not client:
-                            client = self._connect(key.company)
-                        tmp_dict = {self.model._meta.default_id: key.key}
-                        if not self._query(client, self.model._meta.delete,
-                                           **tmp_dict):
-                            success = False
-
-                else:
-                    companies = self.model.client.companies
-                    for company in companies:
-                        client = self._connect(company)
-                        # TODO: catch more accurate the error: Webfault
-                        # because whenever tries to delete something which
-                        # doesn't exist raise this error
-                        try:
-                            if not self._query(client, self.model._meta.delete,
-                                           **kwargs):
-                                success = False
-                        except:
-                            continue
-        return success
-
-    @require_client
-    @require_default
-    def get_or_create(self, companies=None, **kwargs):
-        created = False
-        defaults = kwargs.pop('defaults', None)
-        # Sometimes, the returning object doesn't contain all the attributes
-        # from the defaults so if you specify a new value to an attribute
-        # contained in the defaults but not in the returned object, it will not
-        # saved, so we are going to add this attributes to the declared_fields
-        if not self.model._meta.declared_fields:
-            self.model._meta.add_declared_fields_from_names(defaults.keys())
-
-        try:
-            inst = self.get(**kwargs)
-            created = False
-        except ObjectDoesNotExist:
-            # Update the defaults with the kwargs which contains the query
-            # fields
-            duplicate_keys = [key for key in defaults.keys()
-                              if key in kwargs.keys()]
-            if duplicate_keys:
-                raise AttributeError('Duplicate keys at kwargs and defaults: '
-                                     '%s' % ', '.join(duplicate_keys))
-
-            if self.model._meta.declared_fields:
-                non_declared_fields = [key for key in defaults.keys() if
-                                       key not in self.model._meta.get_declared_field_names()]
-                if non_declared_fields:
-                    raise AttributeError('Some of the keys are not specified '
-                                         'at the fields: %s'
-                                         % ', '.join(non_declared_fields))
-            kwargs.update(defaults)
-            inst = self.create(companies=companies, **kwargs)
-            created = True
-        return inst, created
-
-    @require_client
-    @require_default
-    def update_or_create(self, companies=None, **kwargs):
-        created = False
-        defaults = kwargs.pop('defaults', None)
-        # Same as above
-        if not self.model._meta.declared_fields:
-            self.model._meta.add_declared_fields_from_names(defaults.keys())
-
-        try:
-            inst = self.get(**kwargs)
-            self.update(inst, companies, **defaults)
-            created = False
-        except ObjectDoesNotExist:
-            # Update the defaults with the kwargs which contains the query
-            # fields
-            duplicate_keys = [key for key in defaults.keys()
-                              if key in kwargs.keys()]
-            if duplicate_keys:
-                raise AttributeError('Duplicate keys at kwargs and defaults: '
-                                     '%s' % ', '.join(duplicate_keys))
-
-            if self.model._meta.declared_fields:
-                non_declared_fields = [key for key in defaults.keys() if
-                                       key not in self.model._meta.get_declared_field_names()]
-                if non_declared_fields:
-                    raise AttributeError('Some of the keys are not specified '
-                                         'at the fields: %s'
-                                         % ', '.join(non_declared_fields))
-            kwargs.update(defaults)
-            inst = self.create(companies=companies, **kwargs)
-            created = True
-        return inst, created
-
-    @require_client
-    def filter(self, **kwargs):
-        self.queryset = []
-        companies = self.model.client.companies
-        for company in companies:
-            client = self._connect(company)
-            params = client.get_service_params(self.model._meta.filter)
-
-            filters = []
-            for k in kwargs.keys():
-                filter = client.factory(params[0][1].type[0])
-                setattr(filter, 'Field', k)
-                setattr(filter, 'Criteria', kwargs.get(k))
-                filters.append(filter)
-
-                # TODO: Try pipe filters
-                try:
-                    response = iter(
-                        getattr(client, self.model._meta.filter)(filters)[0])
-                except IndexError:
-                    continue
-
-                for result in response:
-                    log.debug('[%s] From the company %s we got the result: %s'
-                              % (log.name.upper(), company, result))
-                    inst = self.model()
-                    inst.populate_attrs(result)
-                    inst.add_key(company, client,
-                                 getattr(result, self.model._meta.default_id))
-
-                    if self.queryset:
-                        found = False
-                        for obj in self.queryset:
-                            if inst == obj:
-                                obj_keys = getattr(obj,
-                                                   self.model._meta.default_id)
-                                inst_keys = getattr(inst,
-                                                    self.model._meta.default_id)
-                                obj_keys.extend(inst_keys)
-                                found = True
-
-                        if not found:
-                            self.queryset.append(inst)
-                    else:
-                        self.queryset.append(inst)
-
-        return self
-
-    def count(self):
-        """
-        Return the number of the results if the queryset exists
-        """
-        if not self.queryset:
-            raise Exception('No queryset found')
-
-        return len(list(self.queryset))
-
-
-class Manager(object):
-    def __init__(self, model):
-        self.model = model
-
-    def __getattr__(self, item):
-        log.debug('[%s] Calling manager __getattr__: %s' % (log.name.upper(),
-                                                            item))
-        if hasattr(QuerySet, item):
-            def wrapper(*args, **kwargs):
-                log.debug('[%s] called with %r and %r' % (log.name.upper(),
-                                                          args, kwargs))
-                queryset = QuerySet(self, self.model)
-                func = getattr(queryset, item)
-                return func(*args, **kwargs)
-
-            return wrapper
-        raise AttributeError(item)
-
-
-class Key(object):
-    def __init__(self, company, key=None, client=None):
-        self.company = company
-        self.key = key
-        self.client = client
-
-    def __repr__(self):
-        path = '%s.%s' % (self.__class__.__module__, self.__class__.__name__)
-        key = getattr(self, 'key', None)
-        if key is not None:
-            return '<%s: %s>' % (path, key)
-        return '<%s>' % path
-
-
 class Options(object):
     def __init__(self, meta=None):
         self.meta = meta
         self.model = None
-        self.create = 'Create'
-        self.get = 'Read'
-        self.all = None
-        self.update = 'Update'
-        self.delete = 'Delete'
-        self.filter = 'ReadMultiple'
         self.manager = Manager
         self.fields = None
         self.default_id = 'Key'
         self.declared_fields = []
         self.discovered_fields = []
-        self.codeunit_pages = []
         self.readonly_fields = []
         self._page = None
+        self._default_endpoints = (
+            ('create', {
+                'method': 'Create'
+            }),
+            ('get', {
+                'method': 'Read'
+            }),
+            ('all', None),
+            ('update', {
+                'method': 'Update'
+            }),
+            ('delete', {
+                'method': 'Delete'
+            }),
+            ('filter', {
+                'method': 'ReadMultiple'
+            })
+        )
 
+    def _set_endpoints(self, endpoints):
+        for endpoint in endpoints.keys():
+            if endpoints.get(endpoint):
+                setattr(self, endpoint, endpoints[endpoint]['method'])
+
+                # Attach a general method to the BaseQuerySet which can handle
+                # these calls
+                if not hasattr(BaseQuerySet, endpoint):
+                    def func(cls, **kwargs):
+                        method_name = sys._getframe().f_back.f_code.co_name
+
+                        client = cls._connect()
+                        return cls._query(client,
+                                          getattr(self, method_name),
+                                          **kwargs)
+
+                    setattr(BaseQuerySet, endpoint, func)
+
+    #TODO: Deprecated
     def add_default_codeunit_page(self):
         if not self.codeunit_pages:
             default_codeunit_page = 'Codeunit/%s' % self.page.split('/')[-1]
             self.codeunit_pages.append(default_codeunit_page)
+
+    @property
+    def endpoints(self):
+        return self._default_endpoints
+
+    @endpoints.setter
+    def endpoints(self, value):
+        new_endpoints = dict(value)
+        default_endpoints = dict(self._default_endpoints)
+        for k in new_endpoints.keys():
+            default_endpoints.update({k:new_endpoints.get(k)})
+        self._default_endpoints = default_endpoints
 
     @property
     def page(self):
@@ -678,6 +199,12 @@ class Options(object):
             self.discovered_fields.append(f)
 
 
+class NavOptions(Options):
+    def __init__(self, meta=None):
+        super(NavOptions, self).__init__(meta)
+        self.manager = NavManager
+
+
 class BaseModel(type):
     def __new__(cls, name, bases, nmspc):
         super_new = super(BaseModel, cls).__new__
@@ -689,11 +216,39 @@ class BaseModel(type):
 
         # Get class Meta options
         meta = nmspc.pop('Meta', None)
-        new_cls._meta = Options(meta)
+
+        options_class = Options
+        if parents:
+
+            def all_parent_names(parents, results=None):
+                if not results:
+                    results = []
+
+                for p in parents:
+                    for b in p.__bases__:
+                        results.append(b.__name__)
+                        if b.__bases__:
+                            all_parent_names(b.__bases__, results)
+
+
+                return results
+
+            all_parents = all_parent_names(parents)
+            all_parents.extend([p.__name__ for p in parents])
+
+            if 'NavModel' in all_parents:
+                options_class = NavOptions
+        else:
+            if name == 'NavModel':
+                options_class = NavOptions
+
+        new_cls._meta = options_class(meta)
 
         for opt in dir(meta):
             if opt.find('__') == -1:
                 setattr(new_cls._meta, opt, getattr(meta, opt))
+
+        new_cls._meta._set_endpoints(dict(new_cls._meta._default_endpoints))
 
         # Do the appropriate setup for any model parents.
         for base in parents:
@@ -712,8 +267,7 @@ class BaseModel(type):
                 else:
                     new_cls._meta.declared_fields.append(field)
 
-        # TODO: Maybe not needed
-        # Register the Key attribute which will contain all the diferent keys
+        # Register the id attribute which will contain all the diferent ids'
         setattr(new_cls, new_cls._meta.default_id, None)
 
         # Register the rest of the fields
@@ -748,7 +302,7 @@ class BaseModel(type):
         # Assign the model class to the Options instance and add the default
         # codeunit page if is empty
         new_cls._meta.model = new_cls
-        new_cls._meta.add_default_codeunit_page()
+        #new_cls._meta.add_default_codeunit_page()
 
         return new_cls
 
@@ -759,9 +313,6 @@ class Model(object):
     objects = None
 
     def __init__(self, *args, **kwargs):
-        # Initialize the default_id to an empty list
-        setattr(self, self._meta.default_id, [])
-
         # Initialize attributes to the field default value
         for field in self._meta.declared_fields:
             setattr(self, field.name, field.default)
@@ -827,7 +378,7 @@ class Model(object):
             self._meta.add_discovered_field_from_name(attr)
 
     def populate_attrs(self, response):
-        # Remove key from the keylist because it's handled from the add_key
+        # Remove id from the keylist because it's handled from the add_key
         try:
             response.__keylist__.pop(
                 response.__keylist__.index(self._meta.default_id))
@@ -856,68 +407,6 @@ class Model(object):
                         f._blank = True
                         break
 
-    def add_companies(self, companies):
-        """
-        Add companies to the object
-        """
-        for company in companies:
-            keys = getattr(self, self._meta.default_id)
-            keys.append(Key(company))
-
-    def remove_key(self, key):
-        """
-        Removes a Key instance from the default_id attribute
-        """
-        index = None
-        for count, _key in enumerate(getattr(self, self._meta.default_id)):
-            if _key.key == key:
-                index = count
-                break
-
-        if index is not None:
-            getattr(self, self._meta.default_id).pop(index)
-
-    def add_key(self, company, client, key):
-        """
-        Adds a Key instance at the instance default_id (for example on get)
-        or update a company's information (for example at the save)
-        """
-        for _key in getattr(self, self._meta.default_id):
-            if _key.company == company:
-                _key.client, _key.key = client, key
-                return
-
-        keys = getattr(self, self._meta.default_id)
-        keys.append(Key(company, key, client))
-
-    def get_keys(self):
-        """
-        Return all the keys for this object
-        """
-        keys = []
-        for key in getattr(self, self._meta.default_id):
-            if key.key:
-                keys.append(key.key)
-
-        return keys
-
-    def get_companies(self):
-        """
-        Return all the companies for this object
-        """
-        companies = []
-        for key in getattr(self, self._meta.default_id):
-            if key.company:
-                companies.append(key.company)
-
-        return companies
-
-    def get_key_objects(self):
-        """
-        Return the the Key objects
-        """
-        return getattr(self, self._meta.default_id)
-
     def clean(self, exclude=None):
         """
         Cleans all fields and raises a ValidationError containing a dict
@@ -945,6 +434,15 @@ class Model(object):
         if errors:
             raise ValidationError(errors)
 
+    def add_id(self, id):
+        setattr(self, self._meta.default_id, id)
+
+    def get_id(self):
+        if not hasattr(self, self._meta.default_id):
+            return
+
+        return getattr(self, self._meta.default_id)
+
     @require_client
     def save(self):
         """
@@ -952,15 +450,12 @@ class Model(object):
         """
         self.clean()
         # Create dict with all the fields (declared and discovered)
-        # TODO: add readonly fields to ignore at this point because some of them
-        # maybe cannot handle it from the backend
         tmp_dict = dict((field, getattr(self, field)) for field in
                         self._meta.get_field_names() if
                         field not in self._meta.readonly_fields)
 
-        # If there wasn't any change at the companies just update, otherwise
-        # run create which handles these new companies
-        if len(self.get_keys()) == len(self.get_companies()):
+        # If there is the id just update, otherwise run create
+        if self.get_id():
             self.objects.update(obj=self, **tmp_dict)
         else:
             self.objects.create(obj=self, **tmp_dict)
@@ -971,3 +466,93 @@ class Model(object):
         Deletes the object
         """
         return self.objects.delete(obj=self)
+
+
+class NavModel(Model):
+    def __init__(self, *args, **kwargs):
+        # Initialize the default_id to an empty list
+        setattr(self, self._meta.default_id, [])
+        super(NavModel, self).__init__(*args, **kwargs)
+
+    def add_companies(self, companies):
+        """
+        Add companies to the object
+        """
+        for company in companies:
+            instances = self.get_instances()
+            instances.append(Instance(company))
+
+    def get_companies(self):
+        """
+        Return all the companies for this object
+        """
+        companies = []
+        for instance in self.get_instances():
+            if instance.company:
+                companies.append(instance.company)
+
+        return companies
+
+    def remove_id(self, id):
+        """
+        Removes an instance from the default_id attribute
+        """
+        index = None
+        for count, instance in enumerate(self.get_instances()):
+            if instance.id == id:
+                index = count
+                break
+
+        if index is not None:
+            isntances = self.get_instances()
+            isntances.pop(index)
+
+    def add_id(self, company, client, id):
+        """
+        Adds an instance at the default_id (for example on get)
+        or update a badge's information (for example at the save)
+        """
+        for instance in self.get_instances():
+            if instance.company == company:
+                instance.client, instance.id = client, id
+                return
+
+        instances = self.get_instances()
+        instances.append(Instance(company, id, client))
+
+    def get_id(self):
+        """
+        Return all the ids for this object
+        """
+        ids = []
+        for instance in self.get_instances():
+            if instance.id:
+                ids.append(instance.id)
+
+        return ids
+
+    def get_instances(self):
+        """
+        Returns the instance objects
+        """
+        return getattr(self, self._meta.default_id)
+
+    def save(self):
+        """
+        Saves or updates the object
+        """
+        if len(self.get_companies()) == 0:
+            return
+
+        self.clean()
+        # Create dict with all the fields (declared and discovered)
+        tmp_dict = dict((field, getattr(self, field)) for field in
+                        self._meta.get_field_names() if
+                        field not in self._meta.readonly_fields)
+
+        # If there wasn't any change at the companies just update, otherwise
+        # run create which handles these new companies
+        if len(self.get_id()) == len(self.get_companies()):
+            self.objects.update(obj=self, **tmp_dict)
+        else:
+            self.objects.create(obj=self, **tmp_dict)

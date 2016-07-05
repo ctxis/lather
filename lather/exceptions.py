@@ -9,6 +9,14 @@ class ObjectDoesNotExist(Exception):
     pass
 
 
+class ObjectsDoNotExist(Exception):
+    pass
+
+
+class MultipleObjectReturned(Exception):
+    pass
+
+
 class ValidationError(Exception):
     pass
 
