@@ -78,7 +78,7 @@ class Options(object):
         self.default_id = 'Key'
         self.declared_fields = []
         self.discovered_fields = []
-        self.readonly_fields = []
+        self.exclude_fields = []
         self._page = None
         self._default_endpoints = (
             ('create', {
@@ -363,11 +363,15 @@ class Model(object):
         Exam if two objects are equal
         """
         for field in self._meta.get_field_names():
+            if field in self._meta.exclude_fields:
+                continue
+
             try:
                 if getattr(self, field) != getattr(other, field):
                     return False
             except AttributeError:
                 return False
+
         return True
 
     def _add_discoved_field(self, attr):
@@ -452,7 +456,7 @@ class Model(object):
         # Create dict with all the fields (declared and discovered)
         tmp_dict = dict((field, getattr(self, field)) for field in
                         self._meta.get_field_names() if
-                        field not in self._meta.readonly_fields)
+                        field not in self._meta.exclude_fields)
 
         # If there is the id just update, otherwise run create
         if self.get_id():
@@ -548,7 +552,7 @@ class NavModel(Model):
         # Create dict with all the fields (declared and discovered)
         tmp_dict = dict((field, getattr(self, field)) for field in
                         self._meta.get_field_names() if
-                        field not in self._meta.readonly_fields)
+                        field not in self._meta.exclude_fields)
 
         # If there wasn't any change at the companies just update, otherwise
         # run create which handles these new companies
