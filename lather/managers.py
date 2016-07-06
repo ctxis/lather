@@ -375,13 +375,14 @@ class NavQuerySet(BaseQuerySet):
             # This if will be true when the previous function is the
             # update_or_create
             if self.queryset:
+                existing_companies = []
                 for inst in self.queryset:
                     # Finally we will have:
                     # add_companies: contains new companies and will create
                     # update_companies: contains existing companies and will update
                     # delete_companies: contains deleted companies and will delete
                     add_companies = []
-                    existing_companies = inst.get_companies()
+                    existing_companies.extend(inst.get_companies())
                     delete_companies = []
                     if companies:
                         add_companies = companies[:]
@@ -394,6 +395,17 @@ class NavQuerySet(BaseQuerySet):
                                 delete_companies.append(company)
                     else:
                         update_companies = existing_companies[:]
+
+                    new_add_companies = add_companies[:]
+                    for company in add_companies:
+                        for inst2 in self.queryset:
+                            if company in inst2.get_companies():
+                                if company not in update_companies:
+                                    update_companies.append(company)
+                                new_add_companies.pop(new_add_companies.index(company))
+
+                    add_companies = new_add_companies[:]
+
 
                     for instance in inst.get_instances():
                         if instance.company in update_companies:
@@ -417,7 +429,7 @@ class NavQuerySet(BaseQuerySet):
 
                                 response = super(NavQuerySet, self).update(**delete)
                                 inst.remove_id(instance)
-                            if delete:
+                            if delete == True:
                                 tmp_dict = {self.model._meta.default_id:
                                                 str(instance.id)}
                                 self.delete(**tmp_dict)
