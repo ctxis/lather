@@ -71,10 +71,18 @@ class BaseQuerySet(object):
         """
         Central method which executes the api calls
         """
+        params = {}
         if not method:
             raise TypeError('Method must be a string not None.')
+
+        if self.model._meta.journal:
+            params.update({'CurrentJnlBatchName': self.model._meta.journal})
+            kwargs.update(params)
+
         if kwargs.get('attrs', None):
-            return getattr(client, method)(kwargs.get('attrs'))
+            params.update({self.model.__name__: kwargs.get('attrs')})
+            return getattr(client, method)(**params)
+
         return getattr(client, method)(**kwargs)
 
     def _check_kwargs(self, method, **kwargs):
@@ -148,19 +156,28 @@ class BaseQuerySet(object):
 
     @require_client
     def filter(self, **kwargs):
-        params = self.client.get_service_params(self.model._meta.filter)
-
+        index = 0
+        params = {}
         filters = []
+
+        service_params = self.client.get_service_params(self.model._meta.filter)
+
+        if self.model._meta.journal:
+            params.update({'CurrentJnlBatchName': self.model._meta.journal})
+            index = 1
+        params.update({'filter': filters})
+
         for k in kwargs.keys():
-            filter = self.client.factory(params[0][1].type[0])
+            filter = self.client.factory(service_params[index][1].type[0])
             setattr(filter, 'Field', k)
             setattr(filter, 'Criteria', kwargs.get(k))
             filters.append(filter)
 
         # TODO: Try pipe filters
         try:
-            response = iter\
-                (getattr(self.client, self.model._meta.filter)(filters)[0])
+            response = iter(
+                getattr(self.client, self.model._meta.filter)(**params)[0]
+            )
         except IndexError:
             raise ObjectsDoNotExist('Objects not found')
 
