@@ -203,6 +203,7 @@ class NavOptions(Options):
     def __init__(self, meta=None):
         super(NavOptions, self).__init__(meta)
         self.manager = NavManager
+        self.journal = None
 
 
 class BaseModel(type):
